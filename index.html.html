@@ -1,0 +1,1414 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ThePikehunters Catchlog - Professional Catch Registration with Database Sync</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+    
+    <!-- Leaflet JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    
+    <!-- SheetJS for Excel export - kept for compatibility -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    
+    <!-- Supabase Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #f5f5f5;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1900px;
+            margin: 0 auto;
+            background: white;
+            box-shadow: 0 0 40px rgba(0, 0, 0, 0.1);
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+            color: white;
+            padding: 20px 30px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+        
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        
+        .logo {
+            width: 60px;
+            height: 60px;
+            filter: invert(1);
+            opacity: 0.95;
+        }
+        
+        .header-title {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header h1 {
+            font-size: 1.8em;
+            margin: 0;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+        
+        .header-subtitle {
+            font-size: 0.9em;
+            opacity: 0.8;
+            margin-top: 2px;
+        }
+        
+        .version-badge {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .controls {
+            padding: 15px 30px;
+            background: white;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+        }
+        
+        .file-input-wrapper input[type=file] {
+            position: absolute;
+            left: -9999px;
+        }
+        
+        .file-input-label {
+            display: inline-block;
+            padding: 10px 20px;
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+            color: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            font-size: 0.9em;
+        }
+        
+        .file-input-label:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.9em;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
+            color: white;
+        }
+        
+        .btn-success {
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+            color: white;
+        }
+        
+        .btn-danger {
+            background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);
+            color: white;
+        }
+        
+        .btn-warning {
+            background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+            color: white;
+        }
+        
+        .btn-info {
+            background: linear-gradient(135deg, #00bcd4 0%, #0097a7 100%);
+            color: white;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .debug-button {
+            background: linear-gradient(135deg, #9C27B0 0%, #7B1FA2 100%);
+        }
+        
+        .cloud-sync-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 6px 12px;
+            background: linear-gradient(135deg, rgba(0, 188, 212, 0.1) 0%, rgba(0, 151, 167, 0.1) 100%);
+            border-radius: 15px;
+            font-size: 0.8em;
+            color: #0097a7;
+            margin-left: 10px;
+            border: 1px solid rgba(0, 188, 212, 0.2);
+            transition: all 0.3s ease;
+        }
+        
+        .cloud-sync-status:hover {
+            background: linear-gradient(135deg, rgba(0, 188, 212, 0.15) 0%, rgba(0, 151, 167, 0.15) 100%);
+            transform: translateY(-1px);
+        }
+        
+        /* Hide export button - keep cloud sync visible */
+        #exportBtn {
+            display: none !important;
+        }
+        
+        /* Adjust export-group for dual button layout - Database Sync Theme */
+        .export-group {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+            background: rgba(33, 150, 243, 0.05);
+            padding: 8px;
+            border-radius: 8px;
+            border: 1px solid rgba(33, 150, 243, 0.2);
+            position: relative;
+        }
+        
+        .export-group::before {
+            content: "☁️";
+            position: absolute;
+            top: -8px;
+            left: 8px;
+            background: white;
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-size: 0.8em;
+            border: 1px solid rgba(33, 150, 243, 0.2);
+        }
+        
+        .export-group .btn {
+            position: relative;
+            margin: 0;
+        }
+        
+        .export-group .btn-success {
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+            box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+        }
+        
+        .export-group .btn-info:first-of-type {
+            background: linear-gradient(135deg, #FF9800 0%, #f57c00 100%);
+            box-shadow: 0 2px 8px rgba(255, 152, 0, 0.3);
+        }
+        
+        .export-group .btn-info:last-child {
+            background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
+            box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
+            font-weight: 600;
+        }
+        
+        .main-content {
+            display: flex;
+            height: 700px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        #map {
+            flex: 1;
+            background: #e9ecef;
+            cursor: crosshair;
+            position: relative;
+        }
+        
+        #map.leaflet-drag-target {
+            cursor: move;
+        }
+        
+        .map-watermark {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 150px;
+            height: 150px;
+            background: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0MDAgNDAwIj48ZyBmaWxsPSJub25lIiBzdHJva2U9IiMwMDAiIHN0cm9rZS13aWR0aD0iMiIgb3BhY2l0eT0iMC4xIj48cGF0aCBkPSJNMjAwIDEwMGMtNTAgMC05MCA0MC05MCA5MHM0MCA5MCA5MCA5MCA5MC00MCA5MC05MC00MC05MC05MC05MHoiLz48L2c+PC9zdmc+') no-repeat center;
+            background-size: contain;
+            opacity: 0.05;
+            pointer-events: none;
+            z-index: 1000;
+        }
+        
+        .sidebar {
+            width: 420px;
+            background: white;
+            border-left: 1px solid #e0e0e0;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .sidebar-header {
+            padding: 20px;
+            background: #fafafa;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .sidebar-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+        
+        .session-item {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            transition: all 0.3s ease;
+        }
+        
+        .session-item:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            border-color: #2196F3;
+        }
+        
+        .session-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .session-title {
+            font-weight: 600;
+            font-size: 1.1em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .session-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        
+        .session-info {
+            color: #666;
+            font-size: 0.9em;
+            line-height: 1.6;
+        }
+        
+        .session-edit-btn {
+            background: #2196F3;
+            color: white;
+            border: none;
+            padding: 5px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8em;
+            margin-top: 8px;
+            margin-right: 5px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .session-edit-btn:hover {
+            background: #1976D2;
+            transform: translateY(-1px);
+        }
+        
+        .session-edit-btn.danger {
+            background: #f44336;
+        }
+        
+        .session-edit-btn.danger:hover {
+            background: #d32f2f;
+        }
+        
+        .session-edit-btn.success {
+            background: #4CAF50;
+        }
+        
+        .session-edit-btn.success:hover {
+            background: #45a049;
+        }
+        
+        .waypoint-editor {
+            background: #fafafa;
+            border-radius: 6px;
+            padding: 12px;
+            margin-top: 10px;
+            display: none;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .waypoint-item {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            padding: 8px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .waypoint-info {
+            flex: 1;
+        }
+        
+        .waypoint-controls {
+            display: flex;
+            gap: 5px;
+        }
+        
+        .small-input {
+            width: 60px;
+            padding: 2px 5px;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+            font-size: 0.8em;
+        }
+        
+        .status-message {
+            padding: 12px 20px;
+            border-radius: 6px;
+            margin: 15px 30px;
+            display: none;
+            animation: slideIn 0.3s ease;
+            font-weight: 500;
+        }
+        
+        @keyframes slideIn {
+            from {
+                transform: translateY(-20px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+        
+        .status-success {
+            background: #e8f5e9;
+            color: #2e7d32;
+            border: 1px solid #c8e6c9;
+        }
+        
+        .status-error {
+            background: #ffebee;
+            color: #c62828;
+            border: 1px solid #ffcdd2;
+        }
+        
+        .status-info {
+            background: #e3f2fd;
+            color: #1565c0;
+            border: 1px solid #bbdefb;
+        }
+        
+        .status-warning {
+            background: #fff3e0;
+            color: #e65100;
+            border: 1px solid #ffe0b2;
+        }
+        
+        .stats-panel {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+        
+        .stat-item {
+            text-align: center;
+            padding: 10px;
+            background: #f8f8f8;
+            border-radius: 4px;
+        }
+        
+        .stat-value {
+            font-size: 1.4em;
+            font-weight: bold;
+            color: #2196F3;
+        }
+        
+        .stat-label {
+            font-size: 0.8em;
+            color: #666;
+            margin-top: 2px;
+        }
+        
+        .species-filter {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
+        }
+        
+        .species-tag {
+            background: #e0e0e0;
+            color: #333;
+            padding: 4px 10px;
+            border-radius: 15px;
+            font-size: 0.8em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+        
+        .species-tag.active {
+            background: #2196F3;
+            color: white;
+        }
+        
+        .species-tag:hover {
+            transform: translateY(-1px);
+        }
+        
+        .popup-content h4 {
+            margin: 0 0 10px 0;
+            color: #1a1a1a;
+        }
+        
+        .popup-info {
+            font-size: 0.9em;
+            color: #666;
+        }
+        
+        .leaflet-popup-content {
+            min-width: 250px;
+        }
+        
+        .leaflet-marker-icon {
+            cursor: pointer !important;
+        }
+        
+        .footer {
+            background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+            color: white;
+            text-align: center;
+            padding: 15px;
+            font-size: 0.9em;
+        }
+        
+        .footer a {
+            color: #4CAF50;
+            text-decoration: none;
+        }
+        
+        .data-input-section {
+            padding: 30px;
+            background: #fafafa;
+            min-height: 400px;
+        }
+        
+        .data-input-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .data-input-controls {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .table-container {
+            background: white;
+            border-radius: 8px;
+            overflow-x: auto;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            max-width: 100%;
+        }
+        
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 2000px;
+        }
+        
+        .data-table thead th {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            font-size: 0.85em;
+            font-weight: 600;
+            padding: 12px 8px;
+            text-align: left;
+            white-space: nowrap;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        
+        .data-table thead tr.group-header th {
+            background: linear-gradient(135deg, #2d2d2d 0%, #1a1a1a 100%);
+            color: white;
+            text-align: center;
+            font-size: 0.9em;
+            padding: 10px;
+            border-right: 1px solid #444;
+        }
+        
+        .data-table thead tr.group-header th:last-child {
+            border-right: none;
+        }
+        
+        .data-table thead tr.column-header th {
+            background: #f5f5f5;
+            color: #333;
+            border-right: 1px solid #e0e0e0;
+        }
+        
+        .data-table thead tr.column-header th.session-column {
+            background: #e3f2fd;
+        }
+        
+        .data-table thead tr.column-header th.catch-column {
+            background: #f3e5f5;
+        }
+        
+        .data-table tbody td {
+            padding: 8px;
+            border-bottom: 1px solid #f0f0f0;
+            border-right: 1px solid #f0f0f0;
+            font-size: 0.85em;
+        }
+        
+        .data-table tbody tr:hover {
+            background: #f8f8f8;
+        }
+        
+        .data-table tbody tr.highlighted {
+            background: #fff3cd !important;
+            border: 2px solid #ffc107;
+        }
+        
+        .data-table tbody tr.empty-session {
+            background: #f5f5f5;
+            opacity: 0.7;
+        }
+        
+        .data-table tbody tr.empty-session td {
+            color: #999;
+        }
+        
+        .data-table input[type="text"],
+        .data-table input[type="number"],
+        .data-table select {
+            width: 100%;
+            padding: 4px 6px;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+            font-size: 0.85em;
+            background: white;
+        }
+        
+        .data-table input:focus,
+        .data-table select:focus {
+            outline: none;
+            border-color: #2196F3;
+            box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.1);
+        }
+        
+        .data-table input:disabled,
+        .data-table select:disabled {
+            background: #f5f5f5;
+            color: #999;
+            cursor: not-allowed;
+        }
+        
+        .data-table .readonly {
+            background: #f9f9f9;
+            color: #666;
+        }
+        
+        .data-table .auto-filled {
+            background: #e8f5e9;
+            font-style: italic;
+        }
+        
+        .data-table .col-date { min-width: 100px; }
+        .data-table .col-time { min-width: 70px; }
+        .data-table .col-location { min-width: 200px; }
+        .data-table .col-gps { min-width: 150px; }
+        .data-table .col-species { min-width: 100px; }
+        .data-table .col-length { min-width: 80px; }
+        .data-table .col-count { min-width: 60px; }
+        .data-table .col-depth { min-width: 80px; }
+        .data-table .col-weight { min-width: 80px; }
+        .data-table .col-technique { min-width: 120px; }
+        .data-table .col-lure { min-width: 150px; }
+        .data-table .col-small { min-width: 100px; }
+        
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+        }
+        
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 24px;
+        }
+        
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        
+        input:checked + .toggle-slider {
+            background-color: #2196F3;
+        }
+        
+        input:checked + .toggle-slider:before {
+            transform: translateX(26px);
+        }
+        
+        .validation-error {
+            border: 2px solid #f44336 !important;
+            background-color: #ffebee !important;
+        }
+        
+        .validation-error:focus {
+            border-color: #f44336 !important;
+            box-shadow: 0 0 0 2px rgba(244, 67, 54, 0.2) !important;
+        }
+        
+        .validation-incomplete {
+            border-left: 4px solid #ff9800 !important;
+            background-color: #fff8e1 !important;
+        }
+        
+        .time-validation-error {
+            border-left: 4px solid #f44336 !important;
+            background-color: #ffebee !important;
+        }
+        
+        .lure-selector-modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            animation: fadeIn 0.3s ease;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        .lure-selector-content {
+            background-color: white;
+            margin: 5% auto;
+            padding: 0;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 1000px;
+            max-height: 80vh;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        }
+        
+        .lure-selector-header {
+            background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .lure-selector-header h3 {
+            margin: 0;
+            font-size: 1.2em;
+        }
+        
+        .lure-selector-close {
+            color: white;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            line-height: 20px;
+            transition: transform 0.3s ease;
+        }
+        
+        .lure-selector-close:hover {
+            transform: rotate(90deg);
+        }
+        
+        .lure-selector-search {
+            padding: 15px 20px;
+            background: #f5f5f5;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .lure-search-input {
+            width: 100%;
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        
+        .lure-selector-body {
+            padding: 20px;
+            overflow-y: auto;
+            max-height: calc(80vh - 140px);
+        }
+        
+        .lure-categories {
+            margin-bottom: 10px;
+        }
+        
+        .lure-category-tabs {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
+        }
+        
+        .lure-category-tab {
+            padding: 6px 12px;
+            background: #e0e0e0;
+            border: none;
+            border-radius: 15px;
+            cursor: pointer;
+            font-size: 0.85em;
+            transition: all 0.3s ease;
+        }
+        
+        .lure-category-tab.active {
+            background: #2196F3;
+            color: white;
+        }
+        
+        .lure-category-tab:hover {
+            transform: translateY(-1px);
+        }
+        
+        .lure-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .lure-item {
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 15px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: white;
+            position: relative;
+            min-height: 220px;
+        }
+        
+        .lure-edit-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 0.9em;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            z-index: 10;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        
+        .lure-item:hover .lure-edit-btn {
+            opacity: 1;
+        }
+        
+        .lure-edit-btn:hover {
+            background: #1976D2;
+        }
+        
+        .lure-item:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            transform: translateY(-2px);
+            border-color: #2196F3;
+        }
+        
+        .lure-item-image {
+            font-size: 3em;
+            margin-bottom: 10px;
+            height: 150px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .lure-item-image img {
+            max-width: 100%;
+            max-height: 150px;
+            object-fit: contain;
+        }
+        
+        .lure-item-name {
+            font-size: 0.85em;
+            color: #333;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            margin-top: 10px;
+        }
+        
+        .lure-add-new {
+            border: 2px dashed #4CAF50;
+            background: #f0fff4;
+            min-height: 220px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        
+        .lure-add-new .lure-item-image {
+            color: #4CAF50;
+            font-size: 4em;
+        }
+        
+        .lure-add-new:hover {
+            background: #e8f5e9;
+            border-color: #45a049;
+        }
+        
+        .lure-input-wrapper {
+            position: relative;
+            display: inline-block;
+            width: 100%;
+        }
+        
+        .lure-input {
+            width: 100%;
+            padding: 4px 30px 4px 25px;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+            font-size: 0.85em;
+        }
+        
+        .lure-input-icon {
+            position: absolute;
+            left: 6px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 0.9em;
+        }
+        
+        .lure-browse-btn {
+            position: absolute;
+            right: 2px;
+            top: 50%;
+            transform: translateY(-50%);
+            padding: 2px 8px;
+            background: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 0.75em;
+        }
+        
+        .lure-browse-btn:hover {
+            background: #1976D2;
+        }
+        
+        .add-lure-form {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 15px;
+            display: none;
+            border: 2px solid #2196F3;
+            box-shadow: 0 4px 12px rgba(33, 150, 243, 0.2);
+        }
+        
+        .add-lure-form.active {
+            display: block !important;
+        }
+        
+        .add-lure-form input, .add-lure-form select {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        .add-lure-form button {
+            margin: 5px 5px 0 0;
+            padding: 8px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85em;
+        }
+        
+        .add-lure-save {
+            background: #4CAF50;
+            color: white;
+        }
+        
+        .add-lure-cancel {
+            background: #f44336;
+            color: white;
+        }
+        
+        .brand-add-row {
+            display: flex;
+            gap: 5px;
+            margin: 5px 0;
+        }
+        
+        .brand-add-btn {
+            padding: 8px 12px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        
+        .brand-add-btn:hover {
+            background: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="header-left">
+                <svg class="logo" viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg">
+                    <g fill="currentColor" stroke="none">
+                        <ellipse cx="200" cy="150" rx="120" ry="40"/>
+                        <path d="M 80 150 Q 60 140, 50 150 Q 60 160, 80 150"/>
+                        <path d="M 320 150 L 350 120 L 340 150 L 350 180 Z"/>
+                        <path d="M 180 120 L 170 100 L 190 110 Z"/>
+                        <path d="M 180 180 L 170 200 L 190 190 Z"/>
+                        <circle cx="100" cy="145" r="5" fill="white"/>
+                        <circle cx="102" cy="145" r="3" fill="black"/>
+                        <circle cx="150" cy="140" r="3"/>
+                        <circle cx="170" cy="145" r="3"/>
+                        <circle cx="190" cy="140" r="3"/>
+                        <circle cx="210" cy="145" r="3"/>
+                        <circle cx="230" cy="140" r="3"/>
+                        <circle cx="160" cy="155" r="3"/>
+                        <circle cx="180" cy="160" r="3"/>
+                        <circle cx="200" cy="155" r="3"/>
+                        <circle cx="220" cy="160" r="3"/>
+                    </g>
+                </svg>
+                <div class="header-title">
+                    <h1>ThePikehunters Catchlog</h1>
+                    <div class="header-subtitle">Professional Catch Registration with Database Sync</div>
+                </div>
+            </div>
+            <span class="version-badge">Version 6.3 - Database Sync Only</span>
+        </div>
+        
+        <div class="controls">
+            <!-- ✅ STAP 2: Logout knop - helemaal bovenaan controls -->
+            <button class="btn btn-danger" onclick="logout()" style="margin-right: auto;">
+                🚪 Uitloggen
+            </button>
+            
+            <div class="file-input-wrapper">
+                <input type="file" id="gpxInput" accept=".gpx" multiple>
+                <label for="gpxInput" class="file-input-label">📂 GPX Bestanden</label>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; margin: 5px 0;">
+                <span style="color: #666; font-size: 0.85em;">💡 Tip: Upload GPX bestanden OF maak handmatig sessies aan</span>
+            </div>
+            <span style="color: #666; font-size: 0.9em; margin: 0 10px;">of</span>
+            <button class="btn btn-primary" onclick="addNewSession()" id="addSessionBtn">➕ Nieuwe Sessie</button>
+            <button class="btn btn-info" onclick="showValidationModal()" id="validateBtn" title="Controleer data volledigheid voor database sync">🔍 Valideer Data</button>
+            
+            <div class="export-group">
+                <button class="btn btn-success" onclick="exportWithChoice()" id="exportBtn" disabled style="display: none;"
+                        title="Legacy export function - hidden">
+                    📊 Export Data
+                </button>
+                <button class="btn btn-info" id="cloudSyncAasjesBtn" onclick="syncAasjesOnly()" disabled 
+                        title="Upload alle lokale aasjes naar database">
+                    🎣 Sync Aasjes
+                </button>
+                <button class="btn btn-info" id="cloudSyncBtn" onclick="syncToCloud()" disabled 
+                        title="Sync alle sessies naar nieuwe 3-tabel database structuur">
+                    ☁️ Database Sync
+                </button>
+            </div>
+            
+            <button class="btn btn-info" onclick="SettingsManager.exportAll()" title="Exporteer alle instellingen voor teamgebruik">💾 Complete Backup</button>
+            <div class="file-input-wrapper">
+                <input type="file" id="settingsImportInput" accept=".json" onchange="SettingsManager.importAll(this)" style="display: none;">
+                <button class="btn btn-info" onclick="document.getElementById('settingsImportInput').click()" title="Importeer alle instellingen van team">📥 Complete Restore</button>
+            </div>
+            
+            <button class="btn btn-info" onclick="DataManager.showManager()" title="Beheer locaties en dropdown opties">🔧 Data Beheer</button>
+            
+            <button class="btn btn-warning" onclick="clearAll()">🔄 Reset Alles</button>
+            <button class="btn debug-button" onclick="debugInfo.show()">🔧 Debug Info</button>
+            <button class="btn debug-button" id="cloudTestBtn" onclick="testCloudConnection()" style="display: none;" title="Test cloud verbinding">🌐 Test Cloud</button>
+            
+            <span id="fileCount" style="margin-left: auto; color: #666; font-weight: 500;"></span>
+            
+            <div class="cloud-sync-status" id="cloudSyncStatus" style="display: none;" title="Cloud sync status">
+                <span>☁️</span>
+                <span id="cloudSyncStatusText">Offline</span>
+            </div>
+        </div>
+        
+        <div id="statusMessage" class="status-message"></div>
+        
+        <div class="main-content">
+            <div id="map">
+                <div class="map-watermark"></div>
+            </div>
+            <div class="sidebar">
+                <div class="sidebar-header">
+                    <h3 style="margin: 0 0 15px 0; color: #1a1a1a;">Sessie Overzicht</h3>
+                    <div class="stats-panel">
+                        <div class="stats-grid">
+                            <div class="stat-item">
+                                <div class="stat-value" id="sessionCount">0</div>
+                                <div class="stat-label">Sessies</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="catchCount">0</div>
+                                <div class="stat-label">Vangsten</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="speciesCount">0</div>
+                                <div class="stat-label">Soorten</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="totalTime">0h</div>
+                                <div class="stat-label">Totale Tijd</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="species-filter" id="speciesFilter"></div>
+                </div>
+                <div class="sidebar-content" id="sessionsList"></div>
+            </div>
+        </div>
+
+        <div class="data-input-section">
+            <div class="data-input-header">
+                <h3 style="color: #1a1a1a;">Vangstregistratie</h3>
+                <div class="data-input-controls">
+                    <label style="display: flex; align-items: center; gap: 10px;" title="Verberg de eerste 10 kolommen met sessie informatie">
+                        <span>Verberg sessie kolommen:</span>
+                        <div class="toggle-switch">
+                            <input type="checkbox" id="hideSessionColumns" onchange="toggleSessionColumns()">
+                            <span class="toggle-slider"></span>
+                        </div>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 10px;" title="Verberg kolommen waar al data in staat, zodat je ziet wat nog ingevuld moet worden">
+                        <span>Verberg ingevulde kolommen:</span>
+                        <div class="toggle-switch">
+                            <input type="checkbox" id="hideFilledColumns" onchange="toggleFilledColumns()">
+                            <span class="toggle-slider"></span>
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <div class="table-container">
+                <table class="data-table" id="dataInputTable">
+                    <thead>
+                        <tr class="group-header">
+                            <th colspan="10">Sessie Gegevens</th>
+                            <th colspan="13">Vangst Gegevens</th>
+                        </tr>
+                        <tr class="column-header">
+                            <th class="session-column col-date">Datum</th>
+                            <th class="session-column col-time">Tijd</th>
+                            <th class="session-column col-location">Locatie</th>
+                            <th class="session-column col-time">Starttijd</th>
+                            <th class="session-column col-time">Eindtijd</th>
+                            <th class="session-column col-gps">GPS</th>
+                            <th class="session-column col-small">Watersoort</th>
+                            <th class="session-column col-small">Stroming</th>
+                            <th class="session-column col-small">Temp (°C)</th>
+                            <th class="session-column col-small">Helderheid</th>
+                            <th class="catch-column col-species">Soort</th>
+                            <th class="catch-column col-count">Aantal</th>
+                            <th class="catch-column col-length">Lengte (cm)</th>
+                            <th class="catch-column col-depth">Diepte (m)</th>
+                            <th class="catch-column col-lure">Aas</th>
+                            <th class="catch-column col-small">Booster</th>
+                            <th class="catch-column col-weight">Gewicht (g)</th>
+                            <th class="catch-column col-technique">Techniek</th>
+                            <th class="catch-column col-small">Vissnelheid</th>
+                            <th class="catch-column col-small">Structuur</th>
+                            <th class="catch-column col-small">Aasvis</th>
+                            <th class="catch-column col-small">Vangsthoogte</th>
+                            <th class="catch-column col-small">Zon/Schaduw</th>
+                            <th class="catch-column col-small">Bodemhardheid</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dataTableBody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="footer">
+            © 2024 ThePikehunters - Professional Catch Registration System - Database Sync Only v6.3
+        </div>
+    </div>
+
+    <!-- Lure Selector Modal -->
+    <div id="lureModal" class="lure-selector-modal">
+        <div class="lure-selector-content">
+            <div class="lure-selector-header">
+                <h3>Selecteer Aas</h3>
+                <span class="lure-selector-close" onclick="closeLureModal()">&times;</span>
+            </div>
+            <div class="lure-selector-search">
+                <input type="text" class="lure-search-input" id="lureSearchInput" 
+                       placeholder="Zoek aas..." onkeyup="searchLures(this.value)">
+            </div>
+            <div class="lure-selector-body">
+                <div class="lure-categories">
+                    <div class="lure-category-tabs" id="lureCategoryTabs">
+                    </div>
+                    <div style="margin-top: 10px; text-align: center;">
+                        <button class="btn btn-primary" onclick="addNewBrand()" style="padding: 4px 10px; font-size: 0.8em; background: #4CAF50;">
+                            Nieuw Merk
+                        </button>
+                    </div>
+                </div>
+                <div class="lure-grid" id="lureGrid">
+                </div>
+                <div class="add-lure-form" id="addLureForm">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h4 style="margin: 0; color: #1976D2; border-bottom: 2px solid #1976D2; padding-bottom: 8px;">Nieuw aas toevoegen</h4>
+                        <button type="button" onclick="cancelAddLure()" style="background: #666; color: white; border: none; border-radius: 4px; padding: 5px 10px; cursor: pointer;">✕</button>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+                        <div>
+                            <label style="display: block; margin: 0 0 5px 0; font-weight: bold; color: #d32f2f;">Naam *</label>
+                            <input type="text" id="newLureName" placeholder="Naam van het aas" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                        </div>
+                        
+                        <div>
+                            <label style="display: block; margin: 0 0 5px 0; font-weight: bold;">Merk</label>
+                            <div style="display: flex; gap: 5px;">
+                                <select id="newLureCategory" style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                                    <option value="">- Selecteer merk -</option>
+                                </select>
+                                <button type="button" onclick="addBrandFromForm()" style="padding: 8px 12px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">+</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-bottom: 20px;">
+                        <label style="display: block; margin: 0 0 5px 0; font-weight: bold;">Afbeelding URL</label>
+                        <input type="url" id="newLureImage" placeholder="https://voorbeeld.com/afbeelding.jpg" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                    </div>
+                    
+                    <h5 style="margin: 20px 0 15px 0; color: #1976D2; border-bottom: 1px solid #e0e0e0; padding-bottom: 5px;">🎣 Aas Eigenschappen (Fase 1.2)</h5>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+                        <div>
+                            <label style="display: block; margin: 0 0 5px 0; font-weight: bold; color: #d32f2f;">Type *</label>
+                            <select id="newLureType" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                                <option value="">- Wordt geladen... -</option>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label style="display: block; margin: 0 0 5px 0; font-weight: bold; color: #d32f2f;">Actie *</label>
+                            <select id="newLureActie" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                                <option value="">- Wordt geladen... -</option>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label style="display: block; margin: 0 0 5px 0; font-weight: bold; color: #d32f2f;">Drijfvermogen *</label>
+                            <select id="newLureDrijfvermogen" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                                <option value="">- Wordt geladen... -</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+                        <div>
+                            <label style="display: block; margin: 0 0 5px 0; font-weight: bold; color: #d32f2f;">Lengte (cm) *</label>
+                            <input type="number" id="newLureLengte" placeholder="10.5" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;" step="0.1" min="0">
+                        </div>
+                        
+                        <div>
+                            <label style="display: block; margin: 0 0 5px 0; font-weight: bold; color: #d32f2f;">Primaire Kleur *</label>
+                            <select id="newLurePrimaireKleur" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                                <option value="">- Wordt geladen... -</option>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label style="display: block; margin: 0 0 5px 0; font-weight: bold; color: #d32f2f;">Ratel *</label>
+                            <select id="newLureRatel" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                                <option value="">- Wordt geladen... -</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <h6 style="margin: 15px 0 10px 0; color: #666;">Optionele Eigenschappen</h6>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+                        <div>
+                            <label style="display: block; margin: 0 0 5px 0; font-weight: bold;">Vorm</label>
+                            <select id="newLureVorm" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                                <option value="">- Wordt geladen... -</option>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label style="display: block; margin: 0 0 5px 0; font-weight: bold;">Secundaire Kleur</label>
+                            <select id="newLureSecundaireKleur" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                                <option value="">- Wordt geladen... -</option>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label style="display: block; margin: 0 0 5px 0; font-weight: bold;">Tail</label>
+                            <select id="newLureTail" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                                <option value="">- Wordt geladen... -</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div style="display: flex; gap: 10px; margin-top: 20px; padding-top: 15px; border-top: 1px solid #e0e0e0;">
+                        <button type="button" class="add-lure-save" onclick="saveNewLure()" style="background: #4CAF50; color: white; padding: 12px 24px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">✓ Opslaan</button>
+                        <button type="button" onclick="cancelAddLure()" style="background: #f44336; color: white; padding: 12px 24px; border: none; border-radius: 4px; cursor: pointer;">Annuleren</button>
+                        <button type="button" id="deleteLureBtn" onclick="deleteLure()" style="background: #ff9800; color: white; padding: 12px 24px; border: none; border-radius: 4px; cursor: pointer; display: none;">🗑️ Verwijderen</button>
+                    </div>
+                    
+                    <div style="margin-top: 15px; padding: 12px; background: #e3f2fd; border-left: 4px solid #1976D2; border-radius: 4px; font-size: 13px;">
+                        <strong>💡 Tips:</strong><br>
+                        • Velden met * zijn verplicht voor Fase 1.2<br>
+                        • Gebruik duidelijke namen voor je aasjes<br>
+                        • Alle eigenschappen helpen bij betere data analyse
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript Files - CORRECT LOADING ORDER FOR DATABASE SYNC SYSTEM -->
+    <script src="validation-core.js"></script>
+    <script src="data-managers.js"></script>
+    <script src="debug-info.js"></script>
+    <script src="map-processing.js"></script>
+    <script src="ui-sessions.js"></script>
+    <script src="lure-interface.js"></script>
+    <script src="supabase-integration.js"></script>
+    <script src="app-core.js"></script>
+    
+    <!-- ✅ STAP 3: Authentication check bij app start -->
+    <script>
+        document.addEventListener('DOMContentLoaded', async function() {
+            console.log('Checking authentication...');
+            
+            // Wacht even tot alle scripts geladen zijn
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            if (typeof checkAuth === 'function') {
+                const isAuthenticated = await checkAuth();
+                if (!isAuthenticated) {
+                    console.log('Not authenticated, should redirect...');
+                } else {
+                    console.log('User authenticated, app can load');
+                }
+            } else {
+                console.error('checkAuth function not found!');
+            }
+        });
+    </script>
+</body>
+</html>
