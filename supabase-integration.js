@@ -57,23 +57,27 @@ async function checkAuth() {
     }
 }
 
-// Logout functie
 async function logout() {
     const confirmLogout = confirm('Weet je zeker dat je wilt uitloggen?');
     if (!confirmLogout) return;
     
     try {
-        const { error } = await supabaseManager.client.auth.signOut();
-        if (error) {
-            console.error('Logout error:', error);
-            alert('Fout bij uitloggen: ' + error.message);
-        } else {
-            window.location.href = 'login.html';
-        }
+        // Probeer lokale sessie te clearen
+        await supabaseManager.client.auth.signOut({ scope: 'local' });
     } catch (error) {
-        console.error('Logout failed:', error);
-        alert('Kon niet uitloggen. Probeer de pagina te vernieuwen.');
+        // Negeer errors - ga gewoon door met cleanup
+        console.warn('SignOut warning (ignored):', error.message);
     }
+    
+    // Force cleanup: verwijder alle Supabase data uit localStorage
+    Object.keys(localStorage).forEach(key => {
+        if (key.includes('supabase')) {
+            localStorage.removeItem(key);
+        }
+    });
+    
+    // Hard redirect naar login
+    window.location.href = 'login.html';
 }
 
 // Export voor gebruik in andere bestanden
@@ -2317,4 +2321,5 @@ SUCCESS CRITERIA MET:
 
 DEPLOYMENT READY!
 ================================================================================
+
 */
