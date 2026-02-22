@@ -31,43 +31,6 @@ const FEATURE_FLAGS = {
 };
 
 // ================================
-// HELPER FUNCTIONS - Session Naming for Export (PRESERVED FOR COMPATIBILITY)
-// ================================
-
-/**
- * Genereert specifieke sessienaam voor export doeleinden
- * Format: {locatie} - {datum} {tijd} - {team_member} - {sessie_nummer}
- */
-function generateExportSessionName(session, sessionIndex) {
-    // Locatie component
-    const locatie = session.locatie || 'Onbekende locatie';
-    
-    // Datum component (DD/MM/YYYY formaat)
-    const datum = session.startTime.toLocaleDateString('nl-NL', {
-        day: '2-digit', 
-        month: '2-digit', 
-        year: 'numeric'
-    });
-    
-    // Tijd component (HH:MM formaat)
-    const tijd = session.startTime.toLocaleTimeString('nl-NL', {
-        hour: '2-digit', 
-        minute: '2-digit'
-    });
-    
-    // Team member component
-    const teamMember = (typeof supabaseManager !== 'undefined' && supabaseManager.teamMember) 
-        ? supabaseManager.teamMember 
-        : 'Onbekende gebruiker';
-    
-    // Sessie nummer component
-    const sessieNummer = `Sessie ${sessionIndex + 1}`;
-    
-    // Combineer alle componenten
-    return `${locatie} - ${datum} ${tijd} - ${teamMember} - ${sessieNummer}`;
-}
-
-// ================================
 // DATABASE SYNC WORKFLOW FUNCTIONS
 // ================================
 
@@ -830,9 +793,6 @@ window.onload = function() {
 // ================================
 // GLOBAL EXPORTS - DATABASE SYNC FOCUSED
 // ================================
-
-// Session Naming Helper
-window.generateExportSessionName = generateExportSessionName;
 
 // Database Sync Functions (PRIMARY)
 window.hideExportButton = hideExportButton;
