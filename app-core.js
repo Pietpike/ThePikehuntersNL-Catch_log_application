@@ -255,71 +255,6 @@ function exportToExcelEnhanced() {
     }
 }
 
-// Enhanced export function with validation check (PRESERVED)
-function exportToExcelWithValidation() {
-    console.log('=== EXPORT WITH VALIDATION ===');
-    
-    // Redirect to database sync if Excel is disabled
-    if (!FEATURE_FLAGS.EXCEL_EXPORT_ENABLED) {
-        const confirmed = confirm(
-            "Excel export is niet beschikbaar in database-only modus.\n\n" +
-            "Gebruik database sync voor data export.\n\n" +
-            "Wil je doorgaan naar database sync?"
-        );
-        if (confirmed && typeof syncSessionsToDatabase === 'function') {
-            syncSessionsToDatabase();
-        }
-        return false;
-    }
-    
-    if (typeof ValidationStateManager !== 'undefined' && !ValidationStateManager.canValidate()) {
-        console.warn('Validation system busy - retrying export...');
-        setTimeout(() => exportToExcelWithValidation(), 500);
-        return false;
-    }
-    
-    try {
-        let report;
-        if (typeof runOptimizedValidation === 'function') {
-            report = runOptimizedValidation();
-        } else if (typeof generateValidationReport === 'function') {
-            console.warn('Protected validation not available - using direct validation');
-            report = generateValidationReport();
-        } else {
-            console.error('No validation function available');
-            alert('Validatiesysteem niet beschikbaar');
-            return false;
-        }
-        
-        if (!report.summary.canExport) {
-            console.error('Export blocked by validation');
-            if (typeof showValidationModal === 'function') {
-                showValidationModal();
-            } else {
-                alert('Data is niet compleet voor export. Controleer de validatiefouten.');
-            }
-            return false;
-        }
-        
-        console.log('Validation passed - proceeding with Excel export');
-        return exportToExcelEnhanced();
-        
-    } catch (error) {
-        console.error('Protected export validation failed:', error);
-        
-        if (typeof ValidationStateManager !== 'undefined') {
-            ValidationStateManager.emergencyReset();
-        }
-        
-        if (typeof showStatus === 'function') {
-            showStatus('Export validation failed - system reset', 'error');
-        } else {
-            alert('Export validatie gefaald - systeem gereset');
-        }
-        return false;
-    }
-}
-
 // Export choice system (REDIRECTS TO DATABASE SYNC)
 function exportWithChoice() {
     console.log('=== EXPORT WITH CHOICE - DATABASE SYNC REDIRECT ===');
@@ -800,7 +735,6 @@ window.showDatabaseSyncStatus = showDatabaseSyncStatus;
 
 // Legacy Export Functions (PRESERVED FOR COMPATIBILITY)
 window.exportToExcel = exportToExcelEnhanced;
-window.exportToExcelWithValidation = exportToExcelWithValidation;
 window.exportWithChoice = exportWithChoice;
 window.showExportChoiceModal = showExportChoiceModal;
 window.selectExportMethod = selectExportMethod;
