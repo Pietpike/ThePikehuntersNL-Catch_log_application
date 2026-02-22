@@ -145,122 +145,6 @@ const LocationManager = {
             this.createManagerModal();
         }
     },
-    
-    // Enhanced manager modal with cloud sync integration (PRESERVED for backwards compatibility)
-    createManagerModal: function() {
-        const cloudInfo = this.getCloudSyncInfo();
-        const lastAction = this.getLastAction();
-        
-        const modalHTML = `
-            <div id="locationManagerModal" style="
-                display: block;
-                position: fixed;
-                z-index: 2000;
-                left: 0;
-                top: 0;
-                width: 100%;
-                height: 100%;
-                background-color: rgba(0, 0, 0, 0.5);
-            ">
-                <div style="
-                    background-color: white;
-                    margin: 5% auto;
-                    padding: 0;
-                    border-radius: 8px;
-                    width: 90%;
-                    max-width: 700px;
-                    max-height: 80vh;
-                    overflow: hidden;
-                    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-                ">
-                    <div style="
-                        background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
-                        color: white;
-                        padding: 15px 20px;
-                        display: flex;
-                        justify-content: space-between;
-                        align-items: center;
-                    ">
-                        <h3 style="margin: 0; font-size: 1.2em;">
-                            📍 Locatie Beheer ${cloudInfo.available ? '☁️' : ''}
-                        </h3>
-                        <span style="
-                            color: white;
-                            font-size: 28px;
-                            font-weight: bold;
-                            cursor: pointer;
-                            line-height: 20px;
-                        " onclick="LocationManager.closeManager()">&times;</span>
-                    </div>
-                    
-                    ${this.generateCloudSyncHeaderHTML(cloudInfo, lastAction)}
-                    
-                    <div style="padding: 20px; max-height: calc(80vh - 180px); overflow-y: auto;">
-                        <div style="margin-bottom: 20px;">
-                            <h4>Bestaande Locaties (${this.getAll().length}):</h4>
-                            <div id="locationList"></div>
-                        </div>
-                        
-                        <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee;">
-                            <h4>Nieuwe Locatie Toevoegen:</h4>
-                            <div style="display: flex; gap: 10px; margin-top: 10px;">
-                                <input type="text" id="newLocationInput" placeholder="Nieuwe locatie naam (min. 3 tekens)" style="
-                                    flex: 1;
-                                    padding: 8px;
-                                    border: 1px solid #ddd;
-                                    border-radius: 4px;
-                                " maxlength="100">
-                                <button onclick="LocationManager.addFromModal()" style="
-                                    padding: 8px 15px;
-                                    background: #4CAF50;
-                                    color: white;
-                                    border: none;
-                                    border-radius: 4px;
-                                    cursor: pointer;
-                                ">Toevoegen</button>
-                            </div>
-                            <small style="color: #666; margin-top: 5px; display: block;">
-                                Tip: Gebruik formaat "Water - Plaats" (bijv. "Vecht - Breukelen")
-                            </small>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-        
-        document.body.insertAdjacentHTML('beforeend', modalHTML);
-        this.updateLocationList();
-        
-        document.getElementById('locationManagerModal').addEventListener('click', (e) => {
-            if (e.target.id === 'locationManagerModal') {
-                this.closeManager();
-            }
-        });
-    },
-    
-    generateCloudSyncHeaderHTML: function(cloudInfo, lastAction) {
-        if (!cloudInfo.available) {
-            return '';
-        }
-        
-        return `
-            <div style="background: ${cloudInfo.status === 'Ready' ? '#e8f5e9' : '#fff3e0'}; padding: 10px 20px; border-bottom: 1px solid #c8e6c9;">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <div style="color: #2e7d32;">
-                        <strong>☁️ Cloud Sync:</strong> ${cloudInfo.status}
-                        ${cloudInfo.teamMember ? `(${cloudInfo.teamMember})` : ''}
-                    </div>
-                    <div style="font-size: 0.8em; color: #666;">
-                        ${lastAction ? `Laatste wijziging: ${lastAction.action} - ${new Date(lastAction.timestamp).toLocaleString('nl-NL')}` : 'Geen recente wijzigingen'}
-                    </div>
-                </div>
-                <small style="color: #2e7d32; display: block; margin-top: 5px;">
-                    Locaties worden automatisch meegenomen bij backup/restore en cloud sync operaties
-                </small>
-            </div>
-        `;
-    },
-    
     updateLocationList: function() {
         const listContainer = document.getElementById('locationList');
         if (!listContainer) return;
@@ -356,14 +240,7 @@ const LocationManager = {
             if (typeof updateDataTable === 'function') updateDataTable();
         }
     },
-    
-    closeManager: function() {
-        const modal = document.getElementById('locationManagerModal');
-        if (modal) {
-            modal.remove();
-        }
-    },
-    
+
     // Enhanced cloud sync info gathering
     getCloudSyncInfo: function() {
         let cloudInfo = {
