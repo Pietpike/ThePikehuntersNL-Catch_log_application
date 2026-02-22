@@ -139,11 +139,6 @@ function generateExportSessionName(session, sessionIndex) {
     return `${locatie} - ${datum} ${tijd} - ${teamMember} - ${sessieNummer}`;
 }
 
-function normalizeDecimal(value) {
-    if (!value && value !== 0) return value;
-    return value.toString().replace(',', '.');
-}
-
 function toLocalISOString(date) {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');

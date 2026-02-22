@@ -20,16 +20,6 @@ USER INTERFACE & SESSION MANAGEMENT - WITH ENHANCED CLOUD SYNC INTEGRATION + NEW
 */
 
 // ================================
-// FIX 1: DECIMAL NORMALIZATION HELPER FUNCTION
-// ================================
-
-function normalizeDecimal(value) {
-    if (!value && value !== 0) return value;
-    // Convert comma to dot for proper parseFloat processing
-    return value.toString().replace(',', '.');
-}
-
-// ================================
 // ENHANCED: updateSessionsList() - With Cloud Sync Integration
 // ================================
 
