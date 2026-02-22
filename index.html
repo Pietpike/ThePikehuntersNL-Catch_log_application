@@ -1393,10 +1393,14 @@
     <script>
         document.addEventListener('DOMContentLoaded', async function() {
             console.log('Checking authentication...');
-            
-            // Wacht even tot alle scripts geladen zijn
-            await new Promise(resolve => setTimeout(resolve, 500));
-            
+
+            // Wacht tot supabaseManager.client beschikbaar is (max 10 pogingen × 200ms = 2s)
+            let attempts = 0;
+            while ((!window.supabaseManager || !window.supabaseManager.client) && attempts < 10) {
+                await new Promise(resolve => setTimeout(resolve, 200));
+                attempts++;
+            }
+
             if (typeof checkAuth === 'function') {
                 const isAuthenticated = await checkAuth();
                 if (!isAuthenticated) {

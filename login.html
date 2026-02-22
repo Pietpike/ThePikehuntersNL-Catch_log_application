@@ -153,53 +153,70 @@
             <button type="submit" class="btn" id="loginBtn">Inloggen</button>
         </form>
     </div>
-    
+
+    <!-- Load shared Supabase configuration -->
+    <script src="supabase-integration.js"></script>
+
     <script>
-        const SUPABASE_URL = 'https://hezjtqaowjpyvkadeisp.supabase.co';
-        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhlemp0cWFvd2pweXZrYWRlaXNwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM0MTQ3NTMsImV4cCI6MjA2ODk5MDc1M30.hq0IwhnnrJIXfTMGNE6PJkB0qhx2t7h3h0UOpZGi7wo';
-        
-        const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-        
-        checkSession();
-        
+        // Initialize session check after supabaseManager is loaded
+        document.addEventListener('DOMContentLoaded', async function() {
+            // Wait for supabaseManager to be initialized (max 10 attempts × 200ms = 2s)
+            let attempts = 0;
+            while ((!window.supabaseManager || !window.supabaseManager.client) && attempts < 10) {
+                await new Promise(resolve => setTimeout(resolve, 200));
+                attempts++;
+            }
+
+            if (!window.supabaseManager || !window.supabaseManager.client) {
+                console.error('Supabase client not initialized');
+                return;
+            }
+
+            checkSession();
+        });
+
         async function checkSession() {
-            const { data } = await supabaseClient.auth.getSession();
-            if (data.session) {
-                const returnUrl = new URLSearchParams(window.location.search).get('return');
-                window.location.href = returnUrl || 'index.html';
+            try {
+                const { data } = await window.supabaseManager.client.auth.getSession();
+                if (data.session) {
+                    const returnUrl = new URLSearchParams(window.location.search).get('return');
+                    window.location.href = returnUrl || 'index.html';
+                }
+            } catch (error) {
+                console.error('Session check error:', error);
             }
         }
-        
+
         document.getElementById('loginForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            
+
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
             const errorDiv = document.getElementById('error');
             const loginBtn = document.getElementById('loginBtn');
-            
+
             loginBtn.disabled = true;
             loginBtn.textContent = 'Bezig met inloggen...';
             errorDiv.classList.remove('show');
-            
+
             try {
-                const { data, error } = await supabaseClient.auth.signInWithPassword({
+                const { data, error } = await window.supabaseManager.client.auth.signInWithPassword({
                     email: email,
                     password: password
                 });
-                
+
                 if (error) throw error;
-                
+
                 console.log('Login succesvol!');
-                
+
                 const returnUrl = new URLSearchParams(window.location.search).get('return');
                 window.location.href = returnUrl || 'index.html';
-                
+
             } catch (error) {
                 console.error('Login error:', error);
-                
+
                 let errorMessage = 'Er ging iets mis bij het inloggen.';
-                
+
                 if (error.message.includes('Invalid login credentials')) {
                     errorMessage = 'Onjuist email adres of wachtwoord.';
                 } else if (error.message.includes('Email not confirmed')) {
@@ -207,10 +224,10 @@
                 } else {
                     errorMessage = error.message;
                 }
-                
+
                 errorDiv.textContent = errorMessage;
                 errorDiv.classList.add('show');
-                
+
                 loginBtn.disabled = false;
                 loginBtn.textContent = 'Inloggen';
             }
