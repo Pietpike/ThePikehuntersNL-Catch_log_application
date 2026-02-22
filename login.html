@@ -160,15 +160,17 @@
     <script>
         // Initialize session check after supabaseManager is loaded
         document.addEventListener('DOMContentLoaded', async function() {
-            // Wait for supabaseManager to be initialized (max 10 attempts × 200ms = 2s)
+            // Wait for supabaseManager to be initialized (max 50 attempts × 200ms = 10s)
             let attempts = 0;
-            while ((!window.supabaseManager || !window.supabaseManager.client) && attempts < 10) {
+            const maxAttempts = 50;
+
+            while ((!window.supabaseManager || !window.supabaseManager.isInitialized || !window.supabaseManager.client) && attempts < maxAttempts) {
                 await new Promise(resolve => setTimeout(resolve, 200));
                 attempts++;
             }
 
-            if (!window.supabaseManager || !window.supabaseManager.client) {
-                console.error('Supabase client not initialized');
+            if (!window.supabaseManager || !window.supabaseManager.isInitialized || !window.supabaseManager.client) {
+                console.error('Supabase client not initialized after ' + (attempts * 200) + 'ms');
                 return;
             }
 
@@ -194,6 +196,13 @@
             const password = document.getElementById('password').value;
             const errorDiv = document.getElementById('error');
             const loginBtn = document.getElementById('loginBtn');
+
+            // Ensure supabaseManager is initialized
+            if (!window.supabaseManager || !window.supabaseManager.isInitialized || !window.supabaseManager.client) {
+                errorDiv.textContent = 'Supabase is nog niet geïnitialiseerd. Probeer het later opnieuw.';
+                errorDiv.classList.add('show');
+                return;
+            }
 
             loginBtn.disabled = true;
             loginBtn.textContent = 'Bezig met inloggen...';
