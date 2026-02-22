@@ -2041,33 +2041,6 @@ function resetBlockedAttempts() {
     console.log('STEP 6: Cloud sync and validation status updated after blocked attempts reset + memory protection');
 }
 
-// ================================
-// ENHANCED HELPER FUNCTIONS FOR CLOUD SYNC INTEGRATION - COMPLETION
-// ================================
-
-function getCloudSyncInfo() {
-    // Get cloud sync information for enhanced UI feedback
-    let cloudInfo = {
-        available: false,
-        status: 'Offline',
-        teamMember: null,
-        initialized: false
-    };
-    
-    if (typeof supabaseManager !== 'undefined') {
-        cloudInfo = {
-            available: true,
-            status: supabaseManager.isInitialized ? 
-                (supabaseManager.teamMember ? 'Ready' : 'Setup Required') : 
-                'Initializing',
-            teamMember: supabaseManager.teamMember,
-            initialized: supabaseManager.isInitialized
-        };
-    }
-    
-    return cloudInfo;
-}
-
 // Enhanced console logging for debugging
 console.log('Enhanced UI Sessions loaded with Cloud Sync Integration + New Dropdown Fields + Decimal Normalization + Manual Session Support + Enhanced Date Input + Step 6 Reset Function Enhancement + DROPDOWN ALIGNMENT FIX + STEP 3 SAFE VALIDATION TRIGGERS + PHASE 1B UNIFIED FUNCTIONS!');
 console.log('- PHASE 1B: Added unified updateSessionField function to replace 4 duplicate functions');
