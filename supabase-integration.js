@@ -2169,28 +2169,13 @@ document.addEventListener('DOMContentLoaded', function() {
         cloudBtn.disabled = true;
         controls.appendChild(cloudBtn);
     }
-    
-    // Create Test Cloud button (hidden, last)
-    if (!document.getElementById('cloudTestBtn')) {
-        const testBtn = document.createElement('button');
-        testBtn.id = 'cloudTestBtn';
-        testBtn.className = 'btn btn-info debug-button';
-        testBtn.innerHTML = 'Test Cloud';
-        testBtn.onclick = testCloudConnection;
-        testBtn.style.display = 'none';
-        controls.appendChild(testBtn);
-    }
-    
-    // Initialize cloud sync after buttons are created
-    setTimeout(() => {
-        initCloudSync().then(success => {
-            if (success) {
-                console.log('Cloud Sync ready v10.1 - FASE 4 COMPLETE + AUTH FIX!');
-                const testBtn = document.getElementById('cloudTestBtn');
-                if (testBtn) testBtn.style.display = 'inline-block';
-            }
-        });
-    }, 2000);
+
+    // Initialize cloud sync
+    initCloudSync().then(success => {
+        if (success) {
+            console.log('Cloud Sync ready v10.1 - FASE 4 COMPLETE + AUTH FIX!');
+        }
+    });
 });
 
 // ================================
