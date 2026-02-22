@@ -161,9 +161,13 @@ function clearAll() {
     
     // Reset validation state
     window.validationState = {
-        lastReport: null,
         enabled: true,
-        phases: ['A', 'B', 'C', 'V']
+        lastReport: null,
+        phases: ['A', 'B', 'C', 'V', 'Cloud'],
+        exportBlocked: false,
+        cloudSyncBlocked: false,
+        lastValidationTime: 0,
+        validationCooldown: 2000
     };
     
     window.blockedCatchAttempts = 0;
