@@ -20,7 +20,6 @@ async function checkAuth() {
     const maxAttempts = 10;
     
     while ((!supabaseManager || !supabaseManager.client) && attempts < maxAttempts) {
-        console.log(`Wachten op Supabase initialisatie... (poging ${attempts + 1}/${maxAttempts})`);
         await new Promise(resolve => setTimeout(resolve, 500));
         attempts++;
     }
@@ -37,14 +36,11 @@ async function checkAuth() {
         
         if (!data.session) {
             // Niet ingelogd, redirect naar login
-            console.log('Niet ingelogd, redirect naar login pagina');
             const currentUrl = encodeURIComponent(window.location.pathname);
             window.location.href = `login.html?return=${currentUrl}`;
             return false;
         }
-        
-        console.log('Ingelogd als:', data.session.user.email);
-        
+
         // Haal email op en gebruik als team member
         const userEmail = data.session.user.email;
         const teamName = userEmail.split('@')[0]; // Gebruik deel voor @ als naam
@@ -169,7 +165,6 @@ async function executeWithRetry(operation, maxRetries = 3, delay = 1000) {
             }
             
             const waitTime = delay * Math.pow(2, attempt - 1);
-            console.log(`Retrying in ${waitTime}ms...`);
             await new Promise(resolve => setTimeout(resolve, waitTime));
         }
     }
@@ -212,10 +207,8 @@ async function recoverPartialUpload(failedSessionIndex, totalSessions, sessions)
     );
     
     if (recoverChoice) {
-        console.log(`Herstart upload vanaf sessie ${failedSessionIndex + 1}`);
         return await processAllSessionsToDatabase(remainingSessions, failedSessionIndex);
     } else {
-        console.log('Gebruiker koos om niet te herstellen');
         return { 
             success: false, 
             error: 'Upload gestopt door gebruiker na partial failure',
@@ -294,9 +287,7 @@ async function findSimilarAasjes(aasNaam, threshold = SUPABASE_CONFIG.similarity
             }))
             .filter(aas => aas.similarity >= threshold && aas.similarity < 1.0)
             .sort((a, b) => b.similarity - a.similarity);
-        
-        console.log(`Found ${similarAasjes.length} similar aasjes for "${aasNaam}"`);
-        
+
         return similarAasjes;
         
     } catch (error) {
@@ -2133,44 +2124,34 @@ function getCloudSyncStatus() {
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Supabase integration v10.1 loading...');
     const controls = document.querySelector('.controls');
-    
-    if (!controls) {
-        console.warn('Controls element not found');
-        return;
-    }
-    
-    // Helper function to safely insert button
-    function safeInsertButton(button, beforeElementId) {
-        const beforeElement = document.getElementById(beforeElementId);
-        if (beforeElement && beforeElement.parentNode === controls) {
-            controls.insertBefore(button, beforeElement);
-        } else {
-            controls.appendChild(button);
+
+    // Setup UI buttons only if on a page with controls (index.html)
+    if (controls) {
+        // Create Sync Aasjes button with correct ID (first)
+        if (!document.getElementById('cloudSyncAasjesBtn')) {
+            const aasSyncBtn = document.createElement('button');
+            aasSyncBtn.id = 'cloudSyncAasjesBtn';
+            aasSyncBtn.className = 'btn btn-success';
+            aasSyncBtn.innerHTML = 'Sync Aasjes';
+            aasSyncBtn.onclick = syncAasjesOnly;
+            controls.appendChild(aasSyncBtn);
         }
-    }
-    
-    // Create Sync Aasjes button with correct ID (first)
-    if (!document.getElementById('cloudSyncAasjesBtn')) {
-        const aasSyncBtn = document.createElement('button');
-        aasSyncBtn.id = 'cloudSyncAasjesBtn';
-        aasSyncBtn.className = 'btn btn-success';
-        aasSyncBtn.innerHTML = 'Sync Aasjes';
-        aasSyncBtn.onclick = syncAasjesOnly;
-        controls.appendChild(aasSyncBtn);
-    }
-    
-    // Create Cloud Sync button (second)
-    if (!document.getElementById('cloudSyncBtn')) {
-        const cloudBtn = document.createElement('button');
-        cloudBtn.id = 'cloudSyncBtn';
-        cloudBtn.className = 'btn btn-info';
-        cloudBtn.innerHTML = 'Cloud Sync (Initializing...)';
-        cloudBtn.onclick = syncToCloud;
-        cloudBtn.disabled = true;
-        controls.appendChild(cloudBtn);
+
+        // Create Cloud Sync button (second)
+        if (!document.getElementById('cloudSyncBtn')) {
+            const cloudBtn = document.createElement('button');
+            cloudBtn.id = 'cloudSyncBtn';
+            cloudBtn.className = 'btn btn-info';
+            cloudBtn.innerHTML = 'Cloud Sync (Initializing...)';
+            cloudBtn.onclick = syncToCloud;
+            cloudBtn.disabled = true;
+            controls.appendChild(cloudBtn);
+        }
+    } else {
+        console.log('Controls element not found - running on non-app page (login.html)');
     }
 
-    // Initialize cloud sync
+    // Initialize cloud sync (always, regardless of page type)
     initCloudSync().then(success => {
         if (success) {
             console.log('Cloud Sync ready v10.1 - FASE 4 COMPLETE + AUTH FIX!');
