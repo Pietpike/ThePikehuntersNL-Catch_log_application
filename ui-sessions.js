@@ -42,11 +42,6 @@ function updateSessionsList() {
         setTimeout(updateCloudSyncStatus, 100);
     }
     
-    // Enhanced logging with cloud sync context
-    const cloudInfo = getCloudSyncInfo();
-    if (cloudInfo.available) {
-        console.log(`Sessions list updated: ${sessions.length} sessions (Cloud sync: ${cloudInfo.status}) + new dropdown fields + decimal normalization`);
-    }
 }
 
 function renderEmptySessionsMessage(container) {
@@ -352,12 +347,6 @@ function updateDataTable() {
         setTimeout(updateCloudSyncStatus, 100);
     }
     
-    // Enhanced logging with cloud sync context + new fields + decimal normalization
-    const cloudInfo = getCloudSyncInfo();
-    if (cloudInfo.available) {
-        const totalRows = sessions.reduce((total, s) => total + Math.max(s.waypoints.length, 1), 0);
-        console.log(`Data table updated: ${totalRows} rows (Cloud sync: ${cloudInfo.status}) + new dropdown fields + decimal normalization`);
-    }
 }
 
 function renderEmptyDataTable(tbody) {
@@ -615,12 +604,6 @@ function filterBySpeciesWithCloudSync(species) {
     updateSessionsList();
     updateDataTable();
     drawWaypoints();
-    
-    // Enhanced cloud sync logging
-    const cloudInfo = getCloudSyncInfo();
-    if (cloudInfo.available) {
-        console.log(`Species filter: ${species || 'All'} (Cloud sync: ${cloudInfo.status}) + new dropdown fields + decimal normalization`);
-    }
 }
 
 function filterBySpecies(species) {
@@ -644,12 +627,6 @@ function updateStats() {
     document.getElementById('catchCount').textContent = totalCatches;
     document.getElementById('speciesCount').textContent = uniqueSpecies;
     document.getElementById('totalTime').textContent = `${totalHours}h`;
-    
-    // Enhanced stats update with cloud sync awareness
-    const cloudInfo = getCloudSyncInfo();
-    if (cloudInfo.available) {
-        console.log(`Stats updated: ${sessions.length} sessions, ${totalCatches} catches (Cloud sync: ${cloudInfo.status}) + new dropdown fields + decimal normalization`);
-    }
 }
 
 // ================================
@@ -772,8 +749,7 @@ function updateSessionField(sessionIndex, field, value, options = {}) {
         }
         
         const cloudText = cloudInfo.available && cloudInfo.teamMember ? ` (Cloud sync: ${cloudInfo.teamMember})` : '';
-        console.log(`Updated session ${sessionIndex} - ${field}: ${value}${cloudText} + new dropdown fields + decimal normalization support + memory protection`);
-        
+
         if (onSuccess) onSuccess();
         return true;
         
@@ -1209,10 +1185,6 @@ function toggleWaypointEditor(sessionIndex) {
     editor.style.display = editor.style.display === 'none' ? 'block' : 'none';
     
     // Enhanced toggle with cloud sync logging
-    const cloudInfo = getCloudSyncInfo();
-    if (cloudInfo.available) {
-        console.log(`Waypoint editor toggled for session ${sessionIndex} (Cloud sync: ${cloudInfo.status}) + new dropdown fields + decimal normalization + memory protection`);
-    }
 }
 
 function updateWaypointWithValidationAndCloudSync(sessionIndex, wpIndex, field, value, inputElement) {
@@ -1241,9 +1213,6 @@ function updateWaypointWithValidationAndCloudSync(sessionIndex, wpIndex, field, 
         updateWaypointWithCloudSync(sessionIndex, wpIndex, field, value);
     }
     
-    const cloudInfo = getCloudSyncInfo();
-    const cloudText = cloudInfo.available ? ` (Cloud sync: ${cloudInfo.status})` : '';
-    console.log(`Waypoint validation for ${field}: ${validationResult.valid ? 'Valid' : validationResult.error}${cloudText} + new dropdown fields + decimal normalization + memory protection`);
 }
 
 function updateWaypointWithValidation(sessionIndex, wpIndex, field, value, inputElement) {
@@ -1525,9 +1494,6 @@ function updateTableCellWithValidationAndCloudSync(sessionIndex, wpIndex, field,
         updateTableCellWithCloudSync(sessionIndex, wpIndex, field, value);
     }
     
-    const cloudInfo = getCloudSyncInfo();
-    const cloudText = cloudInfo.available ? ` (Cloud sync: ${cloudInfo.status})` : '';
-    console.log(`Table validation for ${field}: ${validationResult.valid ? 'Valid' : validationResult.error}${cloudText} + new dropdown fields + decimal normalization + step 6 time validation + memory protection`);
 }
 
 function updateTableCellWithValidation(sessionIndex, wpIndex, field, value, inputElement) {
@@ -1639,9 +1605,6 @@ function updateTableCellWithCloudSync(sessionIndex, wpIndex, field, value) {
         }, 100);
     }
     
-    const cloudInfo = getCloudSyncInfo();
-    const cloudText = cloudInfo.available ? ` (Cloud sync: ${cloudInfo.status})` : '';
-    console.log(`Updated ${field} for session ${sessionIndex}, waypoint ${wpIndex}: ${value}${cloudText} + memory protection + protected validation`);
 }
 
 function updateTableCell(sessionIndex, wpIndex, field, value) {
@@ -1741,12 +1704,6 @@ function handleDropdownChangeWithCloudSync(selectElement, category, callback) {
 }
 
 function openLureModalWithCloudSync(inputElement, sessionIndex, wpIndex) {
-    const cloudInfo = getCloudSyncInfo();
-    
-    if (cloudInfo.available) {
-        console.log(`Lure modal opened for session ${sessionIndex}, waypoint ${wpIndex} (Cloud sync: ${cloudInfo.status}) + new dropdown fields + decimal normalization + step 6 time validation + memory protection`);
-    }
-    
     openLureModal(inputElement);
 }
 
@@ -2012,12 +1969,10 @@ function parseAndValidateDate(dateInput) {
  */
 function resetBlockedAttempts() {
     window.blockedCatchAttempts = 0;
-    console.log('STEP 6: Blocked catch attempts counter reset');
-    
+
     // Update UI immediately to reflect the reset state
     if (typeof supabaseManager !== 'undefined' && supabaseManager.updateUIStatus) {
         supabaseManager.updateUIStatus();
-        console.log('STEP 6: UI status updated after blocked attempts reset');
     }
     
     // STEP 3: Safe cloud sync status update
@@ -2037,35 +1992,7 @@ function resetBlockedAttempts() {
             }
         }, 100);
     }
-    
-    console.log('STEP 6: Cloud sync and validation status updated after blocked attempts reset + memory protection');
 }
-
-// Enhanced console logging for debugging
-console.log('Enhanced UI Sessions loaded with Cloud Sync Integration + New Dropdown Fields + Decimal Normalization + Manual Session Support + Enhanced Date Input + Step 6 Reset Function Enhancement + DROPDOWN ALIGNMENT FIX + STEP 3 SAFE VALIDATION TRIGGERS + PHASE 1B UNIFIED FUNCTIONS!');
-console.log('- PHASE 1B: Added unified updateSessionField function to replace 4 duplicate functions');
-console.log('- PHASE 1B: Added compatibility wrapper functions to maintain backward compatibility');
-console.log('- Cloud sync awareness in all session and waypoint operations');
-console.log('- Enhanced status messages with team member context');
-console.log('- Real-time cloud sync status updates triggered by all operations');
-console.log('- Enhanced user prompts and confirmations with cloud context');
-console.log('- NEW: Zon/Schaduw and Bodemhardheid dropdown fields added to catch data');
-console.log('- FIX 1: Nederlandse komma input (3,5) automatisch geconverteerd naar punten (3.5)');
-console.log('- NEW: Support for manual sessions without track points dependency');
-console.log('- ENHANCED: Multi-format date input with comprehensive validation');
-console.log('- Updated table handling for 13 catch columns (was 15, removed redundant time column)');
-console.log('- STEP 6: Enhanced resetBlockedAttempts() function with comprehensive UI updates');
-console.log('- STEP 6: Time field validation blocks invalid catch times before cleanup');
-console.log('- STEP 6: Blocked attempts counter tracking and UI status integration');
-console.log('- STEP 6: resetBlockedAttempts() called after session time changes');
-console.log('- STEP 6: Enhanced editSessionTimeWithCloudSync() includes reset functionality');
-console.log('- ALIGNMENT FIX: Removed redundant time input column to fix dropdown alignment');
-console.log('- STEP 3: Safe validation triggers using ValidationStateManager to prevent infinite loops');
-console.log('- STEP 3: ValidationStateManager.queueUIUpdate() protects against recursive validation');
-console.log('- STEP 3: Memory protection through controlled UI update queuing');
-console.log('- STEP 3: All validation calls protected with ValidationStateManager.isValidating checks');
-console.log('- STEP 3: Enhanced updateTableCellWithCloudSync() with safe validation triggers');
-console.log('- STEP 3: Enhanced session and waypoint management with ValidationStateManager integration');
 
 /*
 ================================================================================

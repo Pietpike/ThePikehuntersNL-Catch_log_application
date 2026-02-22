@@ -188,7 +188,6 @@ function clearAll() {
 // ================================
 window.onload = function() {
     const version = FEATURE_FLAGS.DATABASE_SYNC_ONLY ? 'Database Sync Only v1.1' : 'Enhanced Export System';
-    console.log(`ThePikehunters Catchlog v6.3 - ${version} - Initializing...`);
     
     try {
         initMap();
@@ -212,8 +211,6 @@ window.onload = function() {
         // Initialize blocked attempts counter
         window.blockedCatchAttempts = 0;
 
-        console.log(`ThePikehunters Catchlog ready with ${version}!`);
-        
         const statusMessage = FEATURE_FLAGS.DATABASE_SYNC_ONLY ? 
             'ThePikehunters Catchlog - Database Sync Workflow + Aas Management geactiveerd!' :
             'ThePikehunters Catchlog geladen met Enhanced Export System!';
@@ -242,16 +239,6 @@ window.clearAll = clearAll;
 
 // Feature Flags (READ-ONLY)
 window.FEATURE_FLAGS = Object.freeze({...FEATURE_FLAGS});
-
-console.log('ThePikehunters Catchlog - Database Sync Workflow + Aas Management loaded!');
-console.log('- hideExportButton() - Configures database-only workflow');
-console.log('- showDatabaseSyncStatus() - Enhanced status for database sync');
-console.log('- exportWithChoice() - Redirects to database sync');
-console.log('- Database sync integration with real-time status updates');
-console.log('- Feature flags configured for database-only workflow');
-console.log('- Excel export functions preserved but redirected to database sync');
-console.log('- Updated button handlers for new 3-tabel database sync functions');
-console.log('- Aas sync button status management (Fase 3.3)');
 
 if (FEATURE_FLAGS.DEBUG_MODE) {
     console.log('=== DEBUG MODE ENABLED ===');

@@ -24,7 +24,6 @@ let initializationTimer = null;
 
 function initLureSelector() {
     initializationAttempts++;
-    console.log(`Initializing Lure Selector (attempt ${initializationAttempts}/${maxInitializationAttempts})...`);
     
     try {
         if (initializationTimer) {
@@ -50,20 +49,16 @@ function initLureSelector() {
             return;
         }
         
-        console.log('LureManager found and valid. Initializing...');
         LureManager.init();
-        
+
         if (typeof DropdownManager !== 'undefined' && typeof DropdownManager.init === 'function') {
             DropdownManager.init();
-            console.log('DropdownManager also initialized');
         } else {
             console.warn('DropdownManager not available - continuing without it');
         }
-        
+
         updateLureGrid();
         setupModalEvents();
-        
-        console.log('✅ Lure Selector initialized successfully!');
         initializationAttempts = 0;
         fallbackMode = false;
         
@@ -91,7 +86,6 @@ function getRetryDelay() {
 }
 
 function initLureSelectorFallback() {
-    console.log('🔄 Running enhanced fallback Lure Selector initialization...');
     fallbackMode = true;
     
     try {
@@ -102,8 +96,7 @@ function initLureSelectorFallback() {
         
         updateLureGridFallback();
         setupModalEvents();
-        
-        console.log('✅ Fallback Lure Selector initialization completed');
+
         startPeriodicCheck();
         
     } catch (error) {
@@ -115,7 +108,6 @@ function initLureSelectorFallback() {
 function startPeriodicCheck() {
     const checkInterval = setInterval(() => {
         if (typeof LureManager !== 'undefined' && typeof LureManager.init === 'function') {
-            console.log('🎉 LureManager now available - reinitializing from fallback mode...');
             clearInterval(checkInterval);
             initializationAttempts = 0;
             initLureSelector();
@@ -124,7 +116,6 @@ function startPeriodicCheck() {
     
     setTimeout(() => {
         clearInterval(checkInterval);
-        console.log('Stopped periodic LureManager checking after 5 minutes');
     }, 300000);
 }
 
@@ -290,7 +281,6 @@ function updateLureGrid(searchQuery) {
 }
 
 function updateLureGridFallback(searchQuery) {
-    console.log('Using fallback lure grid update');
     const grid = document.getElementById('lureGrid');
     if (!grid) return;
     
@@ -313,7 +303,6 @@ function updateLureGridFallback(searchQuery) {
             <div class="lure-item-name">Opnieuw proberen</div>
         `;
         retryDiv.onclick = function() {
-            console.log('Manual retry triggered by user');
             initializationAttempts = 0;
             fallbackMode = false;
             initLureSelector();
@@ -551,8 +540,6 @@ function showAddLureForm() {
     }
     
     delete form.dataset.editing;
-    
-    console.log('✅ Add form shown successfully');
 }
 
 function addBrandFromForm() {
@@ -720,8 +707,6 @@ function cancelAddLure() {
     if (deleteBtn) {
         deleteBtn.style.display = 'none';
     }
-    
-    console.log('✅ Add form cancelled and hidden');
 }
 
 // ================================
@@ -990,16 +975,20 @@ function createAddLureFormHTML() {
 // ================================
 
 function diagnoseInitializationIssue() {
+    if (typeof FEATURE_FLAGS !== 'undefined' && !FEATURE_FLAGS.DEBUG_MODE) {
+        return;
+    }
+
     console.log('=== LURE SELECTOR DIAGNOSTICS ===');
     console.log('Initialization attempts:', initializationAttempts);
     console.log('Fallback mode:', fallbackMode);
     console.log('LureManager available:', typeof LureManager !== 'undefined');
-    
+
     if (typeof LureManager !== 'undefined') {
         console.log('LureManager type:', typeof LureManager);
         console.log('LureManager methods:', Object.getOwnPropertyNames(LureManager));
     }
-    
+
     console.log('DropdownManager available:', typeof DropdownManager !== 'undefined');
     console.log('Modal element exists:', !!document.getElementById('lureModal'));
     console.log('Grid element exists:', !!document.getElementById('lureGrid'));
@@ -1007,8 +996,6 @@ function diagnoseInitializationIssue() {
 }
 
 window.diagnoseInitializationIssue = diagnoseInitializationIssue;
-
-console.log('🎣 OPTION B IMPLEMENTATION: Enhanced Lure Interface loaded - Complete toggle-based approach with all original content preserved!');
 
 /*
 ================================================================================
