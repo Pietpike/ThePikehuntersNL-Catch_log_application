@@ -412,9 +412,7 @@ function validateSpeciesName(species) {
     }
     
     const commonSpecies = [
-        'snoek', 'baars', 'snoekbaars', 'karper', 'brasem', 'voorn', 'roach', 
-        'pike', 'perch', 'zander', 'carp', 'bream', 'rudd', 'blankvoorn',
-        'kolblei', 'zeelt', 'paling', 'meerval'
+        'snoek', 'snoekbaars', 'baars', 'roofblei', 'meerval', 'winde', 'grondel'
     ];
     
     const lowerSpecies = trimmed.toLowerCase();

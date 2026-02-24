@@ -42,9 +42,7 @@ const CONFIG = {
     ],
     
     commonSpecies: [
-        'snoek', 'baars', 'snoekbaars', 'karper', 'brasem', 'voorn',
-        'roach', 'rudd', 'pike', 'perch', 'pikeperch', 'carp', 'bream',
-        'zander', 'blankvoorn', 'kolblei', 'zeelt', 'paling', 'meerval'
+        'snoek', 'snoekbaars', 'baars', 'roofblei', 'meerval', 'winde', 'grondel'
     ],
     
     defaultDropdownOptions: {
