@@ -18,6 +18,12 @@ async function initEnrichmentScreen(sessionId) {
     try {
         console.log('🔧 Initializing enrichment screen...');
 
+        // Maak container schoon voordat opnieuw gerenderd wordt
+        const container = document.getElementById('phase4EnrichmentContent');
+        if (container) {
+            container.innerHTML = '';
+        }
+
         // Laad sessie en vangsten
         const sessionData = await loadSessionForEnrichment(sessionId);
         enrichmentSession = sessionData.session;
