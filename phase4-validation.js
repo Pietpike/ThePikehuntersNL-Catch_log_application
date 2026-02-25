@@ -217,7 +217,7 @@ async function makeSessionFinal() {
         // ===== STAP 1: Check Duplicates =====
         console.log('Step 1: Checking for duplicate sessions...');
 
-        const { data: duplicates, error: dupError } = await supabaseClient
+        const { data: duplicates, error: dupError } = await supabaseManager.client
             .from('sessions')
             .select('id')
             .eq('locatie', session.locatie)
@@ -261,7 +261,7 @@ async function makeSessionFinal() {
                 definitief: true
             };
 
-            const { data: newSession, error: sessionError } = await supabaseClient
+            const { data: newSession, error: sessionError } = await supabaseManager.client
                 .from('sessions')
                 .insert(sessionRecord)
                 .select();
@@ -299,7 +299,7 @@ async function makeSessionFinal() {
             };
         });
 
-        const { data: newCatches, error: catchError } = await supabaseClient
+        const { data: newCatches, error: catchError } = await supabaseManager.client
             .from('catches')
             .insert(catchRecords)
             .select();
@@ -320,7 +320,7 @@ async function makeSessionFinal() {
             console.log('Step 4: Updating field_sessions...');
 
             // Update field_sessions
-            const { error: fsError } = await supabaseClient
+            const { error: fsError } = await supabaseManager.client
                 .from('field_sessions')
                 .update({ session_id: newSessionId })
                 .eq('id', enrichmentSession.id);
@@ -331,7 +331,7 @@ async function makeSessionFinal() {
 
             // Update field_catches
             for (const fieldCatchId of Object.keys(catchIdMap)) {
-                const { error: fcError } = await supabaseClient
+                const { error: fcError } = await supabaseManager.client
                     .from('field_catches')
                     .update({
                         session_id: newSessionId,

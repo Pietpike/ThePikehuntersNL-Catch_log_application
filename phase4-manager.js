@@ -21,7 +21,7 @@ async function loadUnprocessedSessions() {
         console.log('📋 Loading unprocessed sessions...');
 
         // Load veld-sessies (field_sessions)
-        const { data: fieldSessions, error: fieldError } = await supabaseClient
+        const { data: fieldSessions, error: fieldError } = await supabaseManager.client
             .from('field_sessions')
             .select('*, field_catches(count)')
             .eq('genegeerd', false)
@@ -32,7 +32,7 @@ async function loadUnprocessedSessions() {
         console.log(`✓ Loaded ${fieldSessions?.length || 0} field sessions`);
 
         // Load handmatig aangemaakte sessies (sessions tabel)
-        const { data: manualSessions, error: manualError } = await supabaseClient
+        const { data: manualSessions, error: manualError } = await supabaseManager.client
             .from('sessions')
             .select('*, catches(count)')
             .eq('definitief', false)
@@ -263,7 +263,7 @@ async function deleteSessionWithConfirm(sessionId, origin) {
 
     try {
         // UPDATE field_sessions SET genegeerd = TRUE
-        const { error } = await supabaseClient
+        const { error } = await supabaseManager.client
             .from('field_sessions')
             .update({ genegeerd: true })
             .eq('id', sessionId);
@@ -297,7 +297,7 @@ async function openEnrichmentScreen(sessionId, origin) {
         let sessionData;
 
         if (origin === 'veld') {
-            const { data, error } = await supabaseClient
+            const { data, error } = await supabaseManager.client
                 .from('field_sessions')
                 .select('*')
                 .eq('id', sessionId)
@@ -306,7 +306,7 @@ async function openEnrichmentScreen(sessionId, origin) {
             if (error) throw error;
             sessionData = data;
         } else {
-            const { data, error } = await supabaseClient
+            const { data, error } = await supabaseManager.client
                 .from('sessions')
                 .select('*')
                 .eq('id', sessionId)

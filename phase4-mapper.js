@@ -81,7 +81,7 @@ async function initEnrichmentMap(session) {
             .addTo(enrichmentMapInstance);
 
         // Load eerdere vangsten
-        const { data: user } = await supabaseClient.auth.getSession();
+        const { data: user } = await supabaseManager.client.auth.getSession();
         if (user.session?.user?.id) {
             await loadPreviousCatches(user.session.user.id);
             await loadPreviousSightings(user.session.user.id);
@@ -116,7 +116,7 @@ async function loadPreviousCatches(userId) {
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-        const { data: catches, error } = await supabaseClient
+        const { data: catches, error } = await supabaseManager.client
             .from('catches')
             .select('id, soort, lengte, catch_datetime, gps_lat, gps_long')
             .eq('user_id', userId)
@@ -174,7 +174,7 @@ async function loadPreviousSightings(userId) {
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-        const { data: sightings, error } = await supabaseClient
+        const { data: sightings, error } = await supabaseManager.client
             .from('sightings')
             .select('id, soort, datetime_sighting, gps_lat, gps_long')
             .eq('user_id', userId)
@@ -289,7 +289,7 @@ async function onMapClick(latlng) {
 
     try {
         if (isFieldSession) {
-            const { error } = await supabaseClient
+            const { error } = await supabaseManager.client
                 .from('field_catches')
                 .insert({
                     field_session_id: enrichmentSession.id,
@@ -304,7 +304,7 @@ async function onMapClick(latlng) {
 
             if (error) throw error;
         } else {
-            const { error } = await supabaseClient
+            const { error } = await supabaseManager.client
                 .from('catches')
                 .insert({
                     session_id: enrichmentSession.id,

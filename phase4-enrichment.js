@@ -56,7 +56,7 @@ async function loadSessionForEnrichment(sessionId) {
 
     if (origin === 'veld') {
         // Load field_session + field_catches
-        const { data: session, error: sessionError } = await supabaseClient
+        const { data: session, error: sessionError } = await supabaseManager.client
             .from('field_sessions')
             .select('*')
             .eq('id', sessionId)
@@ -64,7 +64,7 @@ async function loadSessionForEnrichment(sessionId) {
 
         if (sessionError) throw sessionError;
 
-        const { data: catches, error: catchError } = await supabaseClient
+        const { data: catches, error: catchError } = await supabaseManager.client
             .from('field_catches')
             .select('*')
             .eq('field_session_id', sessionId)
@@ -79,7 +79,7 @@ async function loadSessionForEnrichment(sessionId) {
         };
     } else {
         // Load manual session + catches
-        const { data: session, error: sessionError } = await supabaseClient
+        const { data: session, error: sessionError } = await supabaseManager.client
             .from('sessions')
             .select('*')
             .eq('id', sessionId)
@@ -87,7 +87,7 @@ async function loadSessionForEnrichment(sessionId) {
 
         if (sessionError) throw sessionError;
 
-        const { data: catches, error: catchError } = await supabaseClient
+        const { data: catches, error: catchError } = await supabaseManager.client
             .from('catches')
             .select('*')
             .eq('session_id', sessionId)
@@ -266,7 +266,7 @@ async function saveSessionData() {
         const isFieldSession = window.currentSession?.origin === 'veld';
 
         if (isFieldSession) {
-            const { error } = await supabaseClient
+            const { error } = await supabaseManager.client
                 .from('field_sessions')
                 .update({
                     locatie: enrichmentSession.locatie,
@@ -280,7 +280,7 @@ async function saveSessionData() {
 
             if (error) throw error;
         } else {
-            const { error } = await supabaseClient
+            const { error } = await supabaseManager.client
                 .from('sessions')
                 .update({
                     locatie: enrichmentSession.locatie,
@@ -424,14 +424,14 @@ async function deleteCatch(catchId, isFieldCatch) {
 
     try {
         if (isFieldCatch === 'true') {
-            const { error } = await supabaseClient
+            const { error } = await supabaseManager.client
                 .from('field_catches')
                 .delete()
                 .eq('id', catchId);
 
             if (error) throw error;
         } else {
-            const { error } = await supabaseClient
+            const { error } = await supabaseManager.client
                 .from('catches')
                 .delete()
                 .eq('id', catchId);
