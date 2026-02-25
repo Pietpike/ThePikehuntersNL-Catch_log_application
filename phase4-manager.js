@@ -373,7 +373,13 @@ async function openEnrichmentScreen(sessionId, origin) {
         console.log('✓ Current session set:', window.currentSession);
 
         // Switch naar enrichment scherm
-        SectionController.loadSection('phase4');
+        showPhase4Screen();
+
+        // Zet enrichment scherm zichtbaar
+        const enrichment = document.getElementById('phase4Enrichment');
+        const overview = document.getElementById('phase4OverviewScreen');
+        if (enrichment) enrichment.style.display = 'block';
+        if (overview) overview.style.display = 'none';
 
         // Trigger enrichment scherm init
         if (typeof initEnrichmentScreen === 'function') {
@@ -383,7 +389,15 @@ async function openEnrichmentScreen(sessionId, origin) {
         }
 
     } catch (error) {
-        console.error('❌ Error opening enrichment:', error);
+        // 🔍 DEBUG: Volledige error details voor troubleshooting
+        console.error('❌ Error opening enrichment - FULL DETAILS:');
+        console.error('Error object:', error);
+        console.error('Error message:', error?.message);
+        console.error('Error stack:', error?.stack);
+        console.error('Error name:', error?.name);
+        console.error('Current session state:', window.currentSession);
+        console.error('Origin:', origin);
+        console.error('SessionId:', sessionId);
         alert('Fout bij openen sessie: ' + error.message);
     }
 }
