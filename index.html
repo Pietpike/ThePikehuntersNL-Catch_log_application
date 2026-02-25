@@ -1139,7 +1139,6 @@
             </div>
             
             <button class="btn btn-info" onclick="DataManager.showManager()" title="Beheer locaties en dropdown opties">🔧 Data Beheer</button>
-            <button class="btn btn-info" id="fieldCatchesBtn" onclick="showFieldCatchesSection()" title="Verwerk veld-vangsten naar definitieve database">🎯 Veld-vangsten</button>
 
             <button class="btn btn-warning" onclick="clearAll()">🔄 Reset Alles</button>
             <button class="btn debug-button" onclick="debugInfo.show()">🔧 Debug Info</button>
@@ -1245,29 +1244,6 @@
                     <tbody id="dataTableBody">
                     </tbody>
                 </table>
-            </div>
-        </div>
-
-        <!-- Veld-vangsten Section - FASE 4 -->
-        <div id="veld-vangsten-sectie" style="display:none; padding: 30px; background: #fafafa; min-height: 400px; border-bottom: 1px solid #e0e0e0;">
-            <div class="data-input-header">
-                <h3 style="color: #1a1a1a;">Veld-vangsten — Verwerken naar definitieve database</h3>
-                <div style="display: flex; gap: 10px; margin-top: 10px;">
-                    <button class="btn btn-primary" onclick="loadFieldSessions()">🔄 Vernieuwen</button>
-                    <button class="btn btn-secondary" onclick="hideFieldCatchesSection()" style="background: linear-gradient(135deg, #757575 0%, #616161 100%); color: white;">Sluit</button>
-                </div>
-            </div>
-            <div id="fieldSessionsList" style="margin-top: 20px;"></div>
-        </div>
-
-        <!-- Field Catch Enrichment Modal -->
-        <div id="fieldCatchEnrichModal" class="lure-selector-modal" style="display:none">
-            <div class="lure-modal-content" style="max-width:800px">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 2px solid #2196F3; padding-bottom: 10px;">
-                    <h3 style="margin: 0; color: #1a1a1a;">Vangst Verrijken &amp; Inladen</h3>
-                    <span style="cursor: pointer; font-size: 28px; line-height: 1; color: #999;" onclick="closeFieldCatchModal()">&times;</span>
-                </div>
-                <div id="fieldCatchEnrichForm"></div>
             </div>
         </div>
 
@@ -1423,8 +1399,7 @@
     <script src="lure-interface.js"></script>
     <script src="supabase-integration.js"></script>
     <script src="app-core.js"></script>
-    <script src="field-catches-module.js"></script>
-    
+
     <!-- ✅ STAP 3: Authentication check bij app start -->
     <script>
         document.addEventListener('DOMContentLoaded', async function() {
