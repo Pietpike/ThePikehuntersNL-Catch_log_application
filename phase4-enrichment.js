@@ -463,10 +463,209 @@ async function deleteCatch(catchId, isFieldCatch) {
 }
 
 /**
- * Modal voor bewerken vangst (placeholder)
+ * Modal voor bewerken vangst met volledig formulier
  */
-function editCatchModal(catchId, isFieldCatch) {
-    alert('Bewerk functie niet geïmplementeerd in deze fase');
+async function editCatchModal(catchId, isFieldCatch) {
+    console.log('✏️ EDIT BUTTON CLICKED!', { catchId, isFieldCatch });
+
+    // Vind de vangst in enrichmentCatches array
+    const catchToEdit = enrichmentCatches.find(c => c.id === catchId);
+    if (!catchToEdit) {
+        alert('Vangst niet gevonden');
+        return;
+    }
+
+    // Bepaal tabel en origin
+    const isFieldOrigin = isFieldCatch === 'true' || isFieldCatch === true;
+
+    // Maak modal overlay
+    const modalOverlay = document.createElement('div');
+    modalOverlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+    `;
+
+    const modalContent = document.createElement('div');
+    modalContent.style.cssText = `
+        background: white;
+        border-radius: 8px;
+        padding: 30px;
+        max-width: 600px;
+        width: 90%;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    `;
+
+    // Modal Header
+    const header = document.createElement('h3');
+    header.textContent = '✏️ Vangst Bewerken';
+    header.style.cssText = 'margin: 0 0 20px 0; color: #1a1a1a;';
+    modalContent.appendChild(header);
+
+    // Formulier Grid
+    const form = document.createElement('div');
+    form.style.cssText = `
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 15px;
+        margin-bottom: 20px;
+    `;
+
+    // Helper function om input field toe te voegen
+    const addField = (label, key, type = 'text', options = null) => {
+        const div = document.createElement('div');
+        div.style.cssText = 'display: flex; flex-direction: column;';
+
+        const labelEl = document.createElement('label');
+        labelEl.textContent = label;
+        labelEl.style.cssText = 'font-weight: 600; margin-bottom: 5px; font-size: 0.9em; color: #333;';
+        div.appendChild(labelEl);
+
+        let input;
+        if (type === 'select' && options) {
+            input = document.createElement('select');
+            input.style.cssText = 'padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9em;';
+
+            const emptyOpt = document.createElement('option');
+            emptyOpt.value = '';
+            emptyOpt.textContent = '— Selecteer —';
+            input.appendChild(emptyOpt);
+
+            options.forEach(opt => {
+                const option = document.createElement('option');
+                option.value = opt;
+                option.textContent = opt;
+                input.appendChild(option);
+            });
+            input.value = catchToEdit[key] || '';
+        } else {
+            input = document.createElement('input');
+            input.type = type;
+            input.style.cssText = 'padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9em;';
+            input.value = catchToEdit[key] || '';
+        }
+
+        input.id = `edit_${key}`;
+        div.appendChild(input);
+        form.appendChild(div);
+        return input;
+    };
+
+    // Voeg velden toe
+    const fields = {
+        soort: addField('Soort *', 'soort', 'select', ['Snoek', 'Snoekbaars', 'Baars', 'Roofblei', 'Meerval', 'Winde', 'Grondel']),
+        lengte: addField('Lengte (cm) *', 'lengte', 'number'),
+        aantal: addField('Aantal', 'aantal', 'number'),
+        vangst_tijd: addField('Vangst Tijd', isFieldOrigin ? 'vangst_tijd' : 'catch_datetime', 'datetime-local'),
+        notities: addField('Notities', isFieldOrigin ? 'notities' : 'waypoint_naam', 'text'),
+        techniek: addField('Techniek', 'techniek', 'select', ['Dropshot', 'Jiggen', 'C-rig', 'T-rig', 'Trollen', 'Spinning', 'Verticalen', 'Jerk', 'Twitch', 'N-rig', 'Cheb-rig']),
+        diepte: addField('Diepte', 'diepte', 'number'),
+        bodemhardheid: addField('Bodemhardheid', 'bodemhardheid', 'select', ['Hard', 'Medium', 'Zacht', 'Onbekend']),
+    };
+
+    modalContent.appendChild(form);
+
+    // Buttons
+    const buttonContainer = document.createElement('div');
+    buttonContainer.style.cssText = 'display: flex; gap: 10px; justify-content: flex-end;';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'btn btn-secondary';
+    cancelBtn.textContent = 'Annuleren';
+    cancelBtn.style.cssText = 'padding: 10px 20px;';
+    cancelBtn.onclick = () => document.body.removeChild(modalOverlay);
+    buttonContainer.appendChild(cancelBtn);
+
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'btn btn-primary';
+    saveBtn.textContent = 'Opslaan';
+    saveBtn.style.cssText = 'padding: 10px 20px;';
+    saveBtn.onclick = async () => {
+        // Validatie
+        if (!fields.soort.value.trim()) {
+            alert('Soort is verplicht');
+            return;
+        }
+        if (!fields.lengte.value) {
+            alert('Lengte is verplicht');
+            return;
+        }
+
+        try {
+            console.log('💾 Saving catch edit...');
+
+            const updateData = {
+                soort: fields.soort.value,
+                lengte: parseInt(fields.lengte.value),
+                aantal: parseInt(fields.aantal.value) || 1,
+                techniek: fields.techniek.value || null,
+                diepte: fields.diepte.value ? parseInt(fields.diepte.value) : null,
+                bodemhardheid: fields.bodemhardheid.value || null,
+            };
+
+            // Voeg time en notes toe afhankelijk van origin
+            if (isFieldOrigin) {
+                if (fields.vangst_tijd.value) {
+                    updateData.vangst_tijd = new Date(fields.vangst_tijd.value).toISOString();
+                }
+                updateData.notities = fields.notities.value || null;
+
+                // Update field_catches
+                const { error } = await supabaseManager.client
+                    .from('field_catches')
+                    .update(updateData)
+                    .eq('id', catchId);
+
+                if (error) throw error;
+            } else {
+                if (fields.vangst_tijd.value) {
+                    updateData.catch_datetime = new Date(fields.vangst_tijd.value).toISOString();
+                }
+                updateData.waypoint_naam = fields.notities.value || null;
+
+                // Update catches
+                const { error } = await supabaseManager.client
+                    .from('catches')
+                    .update(updateData)
+                    .eq('id', catchId);
+
+                if (error) throw error;
+            }
+
+            console.log('✅ Catch updated successfully');
+
+            // Refresh enrichment screen
+            await initEnrichmentScreen(enrichmentSession.id);
+
+            // Verwijder modal
+            document.body.removeChild(modalOverlay);
+
+        } catch (error) {
+            console.error('❌ Error updating catch:', error);
+            alert('Fout bij opslaan: ' + error.message);
+        }
+    };
+    buttonContainer.appendChild(saveBtn);
+
+    modalContent.appendChild(buttonContainer);
+    modalOverlay.appendChild(modalContent);
+    document.body.appendChild(modalOverlay);
+
+    // Sluit modal bij klik buiten
+    modalOverlay.onclick = (e) => {
+        if (e.target === modalOverlay) {
+            document.body.removeChild(modalOverlay);
+        }
+    };
 }
 
 // Initialize on DOM ready
