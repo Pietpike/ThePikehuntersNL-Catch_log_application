@@ -625,39 +625,54 @@ async function editCatchModal(catchId, isFieldCatch) {
         try {
             console.log('💾 Saving catch edit...');
 
-            const updateData = {
+            // Basis velden die beide tabellen hebben
+            const baseUpdateData = {
                 soort: fields.soort.value,
                 lengte: parseInt(fields.lengte.value),
                 aantal: parseInt(fields.aantal.value) || 1,
-                techniek: fields.techniek.value || null,
-                diepte: fields.diepte.value ? parseInt(fields.diepte.value) : null,
-                bodemhardheid: fields.bodemhardheid.value || null,
             };
+
+            // Voeg techniek en diepte toe als opgegeven
+            if (fields.techniek.value) {
+                baseUpdateData.techniek = fields.techniek.value;
+            }
+            if (fields.diepte.value) {
+                baseUpdateData.diepte = parseInt(fields.diepte.value);
+            }
 
             // Voeg time en notes toe afhankelijk van origin
             if (isFieldOrigin) {
                 if (fields.vangst_tijd.value) {
-                    updateData.vangst_tijd = new Date(fields.vangst_tijd.value).toISOString();
+                    baseUpdateData.vangst_tijd = new Date(fields.vangst_tijd.value).toISOString();
                 }
-                updateData.notities = fields.notities.value || null;
+                if (fields.notities.value) {
+                    baseUpdateData.notities = fields.notities.value;
+                }
 
-                // Update field_catches
+                // Update field_catches (beperkte velden)
                 const { error } = await supabaseManager.client
                     .from('field_catches')
-                    .update(updateData)
+                    .update(baseUpdateData)
                     .eq('id', catchIdAsNumber);
 
                 if (error) throw error;
             } else {
                 if (fields.vangst_tijd.value) {
-                    updateData.catch_datetime = new Date(fields.vangst_tijd.value).toISOString();
+                    baseUpdateData.catch_datetime = new Date(fields.vangst_tijd.value).toISOString();
                 }
-                updateData.waypoint_naam = fields.notities.value || null;
+                if (fields.notities.value) {
+                    baseUpdateData.waypoint_naam = fields.notities.value;
+                }
 
-                // Update catches
+                // Voeg bodemhardheid toe voor catches (catches tabel heeft deze kolom)
+                if (fields.bodemhardheid.value) {
+                    baseUpdateData.bodemhardheid = fields.bodemhardheid.value;
+                }
+
+                // Update catches (volledige velden)
                 const { error } = await supabaseManager.client
                     .from('catches')
-                    .update(updateData)
+                    .update(baseUpdateData)
                     .eq('id', catchIdAsNumber);
 
                 if (error) throw error;
