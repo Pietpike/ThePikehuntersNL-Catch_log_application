@@ -7,6 +7,9 @@ let enrichmentMap = null;
 let enrichmentCatches = [];
 let enrichmentSession = null;
 
+// Window object voor opslag van verrijkingsdata die niet in field_catches bestaan
+window.catchEnrichmentData = {};
+
 // ====================================
 // STAP 1: Init Enrichment Screen
 // ====================================
@@ -466,28 +469,18 @@ async function deleteCatch(catchId, isFieldCatch) {
 }
 
 /**
- * Modal voor bewerken vangst met volledig formulier
+ * Modal voor bewerken vangst met ALLE velden
+ * Groep 1 (field_catches/catches tabellen): soort, lengte, aantal, vangst_tijd/catch_datetime, notities/waypoint_naam
+ * Groep 2 (window.catchEnrichmentData): aas, techniek, diepte, bodemhardheid, helderheid override, stroomsnelheid override, watertemperatuur override
  */
 async function editCatchModal(catchId, isFieldCatch) {
     console.log('✏️ EDIT BUTTON CLICKED!', { catchId, isFieldCatch });
 
-    // 🔍 DEBUG: Log volledig enrichmentCatches array om structuur te zien
-    console.log('🔍 enrichmentCatches array:', enrichmentCatches);
-    console.log('🔍 enrichmentCatches length:', enrichmentCatches.length);
-    if (enrichmentCatches.length > 0) {
-        console.log('🔍 Eerste vangst structuur:', enrichmentCatches[0]);
-        console.log('🔍 Alle veldnamen in eerste vangst:', Object.keys(enrichmentCatches[0]));
-        console.log('🔍 Alle id waarden in array:', enrichmentCatches.map((c, idx) => ({ idx, id: c.id, type: typeof c.id })));
-    }
-    console.log('🔍 Zoeken naar catchId:', catchId, 'type:', typeof catchId);
-
     // Converteer catchId naar number omdat c.id in database een number is
     const catchIdAsNumber = parseInt(catchId);
-    console.log('🔍 catchIdAsNumber:', catchIdAsNumber, 'type:', typeof catchIdAsNumber);
 
     // Vind de vangst in enrichmentCatches array op id veld
     const catchToEdit = enrichmentCatches.find(c => c.id === catchIdAsNumber);
-    console.log('🔍 Gevonden vangst met c.id:', catchToEdit);
 
     if (!catchToEdit) {
         console.error('❌ Vangst niet gevonden! catchId:', catchId);
@@ -495,10 +488,11 @@ async function editCatchModal(catchId, isFieldCatch) {
         return;
     }
 
-    const catchToEdit_final = catchToEdit;
-
     // Bepaal tabel en origin
     const isFieldOrigin = isFieldCatch === 'true' || isFieldCatch === true;
+
+    // Haal bestaande verrijkingsdata op voor deze vangst (als aanwezig)
+    const existingEnrichment = window.catchEnrichmentData[catchIdAsNumber] || {};
 
     // Maak modal overlay
     const modalOverlay = document.createElement('div');
@@ -520,7 +514,7 @@ async function editCatchModal(catchId, isFieldCatch) {
         background: white;
         border-radius: 8px;
         padding: 30px;
-        max-width: 600px;
+        max-width: 650px;
         width: 90%;
         max-height: 90vh;
         overflow-y: auto;
@@ -543,7 +537,7 @@ async function editCatchModal(catchId, isFieldCatch) {
     `;
 
     // Helper function om input field toe te voegen
-    const addField = (label, key, type = 'text', options = null) => {
+    const addField = (label, key, type = 'text', options = null, value = null) => {
         const div = document.createElement('div');
         div.style.cssText = 'display: flex; flex-direction: column;';
 
@@ -568,12 +562,12 @@ async function editCatchModal(catchId, isFieldCatch) {
                 option.textContent = opt;
                 input.appendChild(option);
             });
-            input.value = catchToEdit_final[key] || '';
+            input.value = value || '';
         } else {
             input = document.createElement('input');
             input.type = type;
             input.style.cssText = 'padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9em;';
-            input.value = catchToEdit_final[key] || '';
+            input.value = value || '';
         }
 
         input.id = `edit_${key}`;
@@ -582,35 +576,78 @@ async function editCatchModal(catchId, isFieldCatch) {
         return input;
     };
 
-    // Voeg velden toe - afhankelijk van sessie type
+    // Helper om section headers toe te voegen
+    const addSectionHeader = (title) => {
+        const header = document.createElement('div');
+        header.style.cssText = 'grid-column: 1/-1; padding: 15px 0 0 0; border-top: 2px solid #ddd; margin-top: 10px;';
+        const h4 = document.createElement('h4');
+        h4.style.cssText = 'margin: 0 0 10px 0; color: #1a1a1a; font-size: 1em;';
+        h4.textContent = title;
+        header.appendChild(h4);
+        form.appendChild(header);
+    };
+
+    // ============================================================
+    // GROEP 1: Basis velden (opslaan in field_catches/catches)
+    // ============================================================
+    addSectionHeader('📝 Basis Gegevens (opslaan in database)');
+
     const fields = {};
 
-    // Velden die voor beide types bestaan
-    fields.soort = addField('Soort *', 'soort', 'select', ['Snoek', 'Snoekbaars', 'Baars', 'Roofblei', 'Meerval', 'Winde', 'Grondel']);
-    fields.lengte = addField('Lengte (cm) *', 'lengte', 'number');
-    fields.aantal = addField('Aantal', 'aantal', 'number');
+    // Basis velden voor beide types
+    fields.soort = addField('Soort *', 'soort', 'select', ['Snoek', 'Snoekbaars', 'Baars', 'Roofblei', 'Meerval', 'Winde', 'Grondel'], catchToEdit.soort);
+    fields.lengte = addField('Lengte (cm) *', 'lengte', 'number', null, catchToEdit.lengte);
+    fields.aantal = addField('Aantal', 'aantal', 'number', null, catchToEdit.aantal);
 
-    // Tijd en notities velden - andere kolom namen afhankelijk van type
+    // Tijd en notities velden - afhankelijk van type
     if (isFieldOrigin) {
-        // field_catches: slechts 5 kolommen ondersteund
-        fields.vangst_tijd = addField('Vangst Tijd', 'vangst_tijd', 'datetime-local');
-        fields.notities = addField('Notities', 'notities', 'text');
-
-        // Informatie message voor field_sessions
-        const infoDiv = document.createElement('div');
-        infoDiv.style.cssText = 'grid-column: 1/-1; padding: 10px; background: #e3f2fd; border-radius: 4px; font-size: 0.85em; color: #01579b;';
-        infoDiv.innerHTML = 'ℹ️ <strong>Veld-sessie:</strong> Alleen basis velden kunnen hier worden bewerkt. Extra velden worden toegevoegd bij definitief maken.';
-        form.appendChild(infoDiv);
+        fields.vangst_tijd = addField('Vangst Tijd', 'vangst_tijd', 'datetime-local', null, catchToEdit.vangst_tijd);
+        fields.notities = addField('Notities', 'notities', 'text', null, catchToEdit.notities);
     } else {
-        // catches: ondersteunt meer kolommen
-        fields.catch_datetime = addField('Vangst Tijd', 'catch_datetime', 'datetime-local');
-        fields.waypoint_naam = addField('Notities', 'waypoint_naam', 'text');
-
-        // Extra velden alleen voor reguliere sessies
-        fields.techniek = addField('Techniek', 'techniek', 'select', ['Dropshot', 'Jiggen', 'C-rig', 'T-rig', 'Trollen', 'Spinning', 'Verticalen', 'Jerk', 'Twitch', 'N-rig', 'Cheb-rig']);
-        fields.diepte = addField('Diepte', 'diepte', 'number');
-        fields.bodemhardheid = addField('Bodemhardheid', 'bodemhardheid', 'select', ['Hard', 'Medium', 'Zacht', 'Onbekend']);
+        fields.catch_datetime = addField('Vangst Tijd', 'catch_datetime', 'datetime-local', null, catchToEdit.catch_datetime);
+        fields.waypoint_naam = addField('Notities', 'waypoint_naam', 'text', null, catchToEdit.waypoint_naam);
     }
+
+    // ============================================================
+    // GROEP 2: Verrijkingsvelden (opslaan in window.catchEnrichmentData)
+    // ============================================================
+    addSectionHeader('✨ Verrijking (opslaan in sessie, nog niet in database)');
+
+    // Velden die voorkomen in beide types
+    fields.aas = addField('Aas', 'aas', 'select',
+        ['Kunstaaas', 'Natuurlijke aas', 'Paste', 'Corn', 'Boilie', 'Lever', 'Bloedworm'],
+        existingEnrichment.aas
+    );
+    fields.techniek = addField('Techniek', 'techniek', 'select',
+        ['Dropshot', 'Jiggen', 'C-rig', 'T-rig', 'Trollen', 'Spinning', 'Verticalen', 'Jerk', 'Twitch', 'N-rig', 'Cheb-rig'],
+        existingEnrichment.techniek
+    );
+    fields.diepte = addField('Diepte (m)', 'diepte', 'number', null, existingEnrichment.diepte);
+    fields.bodemhardheid = addField('Bodemhardheid', 'bodemhardheid', 'select',
+        ['Hard', 'Medium', 'Zacht', 'Onbekend'],
+        existingEnrichment.bodemhardheid
+    );
+
+    // Override velden voor sessions conditions
+    fields.helderheid_override = addField('Helderheid (override)', 'helderheid_override', 'select',
+        ['Zeer troebel', 'Troebel', 'Matig helder', 'Helder', 'Kristal helder'],
+        existingEnrichment.helderheid_override
+    );
+    fields.stroomsnelheid_override = addField('Stroomsnelheid (override)', 'stroomsnelheid_override', 'select',
+        ['Stilstaand tot licht stromend', 'Licht tot matig stromend', 'Snelstromend'],
+        existingEnrichment.stroomsnelheid_override
+    );
+    fields.watertemperatuur_override = addField('Water temp (override)', 'watertemperatuur_override', 'number', null, existingEnrichment.watertemperatuur_override);
+
+    // Info message
+    const infoDiv = document.createElement('div');
+    infoDiv.style.cssText = 'grid-column: 1/-1; padding: 12px; background: #f3e5f5; border-radius: 4px; font-size: 0.85em; color: #4a148c; margin-top: 10px;';
+    infoDiv.innerHTML = `
+        <strong>💡 Hoe werkt dit?</strong><br>
+        • <strong>Basis Gegevens:</strong> Worden direct in de database opgeslagen<br>
+        • <strong>Verrijking:</strong> Worden opgeslagen in de sessie. Bij "Definitief maken" worden ze meegenomen naar catches tabel
+    `;
+    form.appendChild(infoDiv);
 
     modalContent.appendChild(form);
 
@@ -641,9 +678,11 @@ async function editCatchModal(catchId, isFieldCatch) {
         }
 
         try {
-            console.log('💾 Saving catch edit...');
+            console.log('💾 Saving catch edit with two-tier strategy...');
 
-            // Basis velden - altijd aanwezig
+            // ============================================================
+            // GROEP 1: Basis velden → database
+            // ============================================================
             const updateData = {
                 soort: fields.soort.value,
                 lengte: parseInt(fields.lengte.value),
@@ -651,9 +690,6 @@ async function editCatchModal(catchId, isFieldCatch) {
             };
 
             if (isFieldOrigin) {
-                // field_catches: SLECHTS 5 kolommen ondersteund
-                // id, field_session_id, user_id, vangst_tijd, soort, lengte, aantal, gps_lat, gps_lng, notities, session_id, catch_id, created_at
-
                 if (fields.vangst_tijd.value) {
                     updateData.vangst_tijd = new Date(fields.vangst_tijd.value).toISOString();
                 }
@@ -661,9 +697,8 @@ async function editCatchModal(catchId, isFieldCatch) {
                     updateData.notities = fields.notities.value;
                 }
 
-                console.log('💾 Updating field_catches with:', updateData);
+                console.log('💾 Groep 1: Updating field_catches with:', updateData);
 
-                // Update field_catches - ALLEEN basis velden + vangst_tijd + notities
                 const { error } = await supabaseManager.client
                     .from('field_catches')
                     .update(updateData)
@@ -671,8 +706,6 @@ async function editCatchModal(catchId, isFieldCatch) {
 
                 if (error) throw error;
             } else {
-                // catches: ondersteunt meer kolommen
-
                 if (fields.catch_datetime.value) {
                     updateData.catch_datetime = new Date(fields.catch_datetime.value).toISOString();
                 }
@@ -680,20 +713,8 @@ async function editCatchModal(catchId, isFieldCatch) {
                     updateData.waypoint_naam = fields.waypoint_naam.value;
                 }
 
-                // Extra velden alleen voor catches
-                if (fields.techniek && fields.techniek.value) {
-                    updateData.techniek = fields.techniek.value;
-                }
-                if (fields.diepte && fields.diepte.value) {
-                    updateData.diepte = parseInt(fields.diepte.value);
-                }
-                if (fields.bodemhardheid && fields.bodemhardheid.value) {
-                    updateData.bodemhardheid = fields.bodemhardheid.value;
-                }
+                console.log('💾 Groep 1: Updating catches with:', updateData);
 
-                console.log('💾 Updating catches with:', updateData);
-
-                // Update catches - volledige set velden
                 const { error } = await supabaseManager.client
                     .from('catches')
                     .update(updateData)
@@ -702,7 +723,25 @@ async function editCatchModal(catchId, isFieldCatch) {
                 if (error) throw error;
             }
 
-            console.log('✅ Catch updated successfully');
+            // ============================================================
+            // GROEP 2: Verrijkingsvelden → window.catchEnrichmentData
+            // ============================================================
+            const enrichmentData = {};
+
+            if (fields.aas.value) enrichmentData.aas = fields.aas.value;
+            if (fields.techniek.value) enrichmentData.techniek = fields.techniek.value;
+            if (fields.diepte.value) enrichmentData.diepte = parseInt(fields.diepte.value);
+            if (fields.bodemhardheid.value) enrichmentData.bodemhardheid = fields.bodemhardheid.value;
+            if (fields.helderheid_override.value) enrichmentData.helderheid_override = fields.helderheid_override.value;
+            if (fields.stroomsnelheid_override.value) enrichmentData.stroomsnelheid_override = fields.stroomsnelheid_override.value;
+            if (fields.watertemperatuur_override.value) enrichmentData.watertemperatuur_override = parseInt(fields.watertemperatuur_override.value);
+
+            if (Object.keys(enrichmentData).length > 0) {
+                window.catchEnrichmentData[catchIdAsNumber] = enrichmentData;
+                console.log(`💾 Groep 2: Storing enrichment data for catch ${catchIdAsNumber}:`, enrichmentData);
+            }
+
+            console.log('✅ Catch updated successfully (Groep 1 → database, Groep 2 → window.catchEnrichmentData)');
 
             // Refresh enrichment screen
             await initEnrichmentScreen(enrichmentSession.id);

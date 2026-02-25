@@ -283,7 +283,8 @@ async function makeSessionFinal() {
             const vangstTijd = isFieldSession ? catch_.vangst_tijd : catch_.catch_datetime;
             const catchDate = new Date(vangstTijd);
 
-            return {
+            // Basis catch record
+            const catchRecord = {
                 session_id: newSessionId,
                 soort: catch_.soort,
                 lengte: catch_.lengte || null,
@@ -297,6 +298,22 @@ async function makeSessionFinal() {
                 linked_catch_id: null,
                 linked_sighting_id: null
             };
+
+            // Voeg enrichment data toe van window.catchEnrichmentData (Groep 2 velden)
+            const enrichmentData = window.catchEnrichmentData[catch_.id];
+            if (enrichmentData) {
+                console.log(`💾 Adding enrichment data for catch ${catch_.id}:`, enrichmentData);
+                if (enrichmentData.aas) catchRecord.aas = enrichmentData.aas;
+                if (enrichmentData.techniek) catchRecord.techniek = enrichmentData.techniek;
+                if (enrichmentData.diepte) catchRecord.diepte = enrichmentData.diepte;
+                if (enrichmentData.bodemhardheid) catchRecord.bodemhardheid = enrichmentData.bodemhardheid;
+                // Override velden - alleen gebruiken als niet al ingesteld in sessie
+                if (enrichmentData.helderheid_override) catchRecord.helderheid = enrichmentData.helderheid_override;
+                if (enrichmentData.stroomsnelheid_override) catchRecord.stroomsnelheid = enrichmentData.stroomsnelheid_override;
+                if (enrichmentData.watertemperatuur_override) catchRecord.watertemperatuur_measured = enrichmentData.watertemperatuur_override;
+            }
+
+            return catchRecord;
         });
 
         const { data: newCatches, error: catchError } = await supabaseManager.client
