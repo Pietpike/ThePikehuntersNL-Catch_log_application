@@ -428,18 +428,21 @@ async function deleteCatch(catchId, isFieldCatch) {
     }
 
     try {
+        // Converteer catchId naar number voor consistentie
+        const catchIdAsNumber = parseInt(catchId);
+
         if (isFieldCatch === 'true') {
             const { error } = await supabaseManager.client
                 .from('field_catches')
                 .delete()
-                .eq('id', catchId);
+                .eq('id', catchIdAsNumber);
 
             if (error) throw error;
         } else {
             const { error } = await supabaseManager.client
                 .from('catches')
                 .delete()
-                .eq('id', catchId);
+                .eq('id', catchIdAsNumber);
 
             if (error) throw error;
         }
@@ -447,7 +450,7 @@ async function deleteCatch(catchId, isFieldCatch) {
         console.log('✓ Catch deleted');
 
         // Reload
-        enrichmentCatches = enrichmentCatches.filter(c => c.id !== catchId);
+        enrichmentCatches = enrichmentCatches.filter(c => c.id !== catchIdAsNumber);
         const container = document.getElementById('phase4EnrichmentContent');
         container.innerHTML = '';
         renderSessionForm(enrichmentSession);
@@ -474,11 +477,16 @@ async function editCatchModal(catchId, isFieldCatch) {
     if (enrichmentCatches.length > 0) {
         console.log('🔍 Eerste vangst structuur:', enrichmentCatches[0]);
         console.log('🔍 Alle veldnamen in eerste vangst:', Object.keys(enrichmentCatches[0]));
+        console.log('🔍 Alle id waarden in array:', enrichmentCatches.map((c, idx) => ({ idx, id: c.id, type: typeof c.id })));
     }
     console.log('🔍 Zoeken naar catchId:', catchId, 'type:', typeof catchId);
 
+    // Converteer catchId naar number omdat c.id in database een number is
+    const catchIdAsNumber = parseInt(catchId);
+    console.log('🔍 catchIdAsNumber:', catchIdAsNumber, 'type:', typeof catchIdAsNumber);
+
     // Vind de vangst in enrichmentCatches array op id veld
-    const catchToEdit = enrichmentCatches.find(c => c.id === catchId);
+    const catchToEdit = enrichmentCatches.find(c => c.id === catchIdAsNumber);
     console.log('🔍 Gevonden vangst met c.id:', catchToEdit);
 
     if (!catchToEdit) {
@@ -637,7 +645,7 @@ async function editCatchModal(catchId, isFieldCatch) {
                 const { error } = await supabaseManager.client
                     .from('field_catches')
                     .update(updateData)
-                    .eq('id', catchId);
+                    .eq('id', catchIdAsNumber);
 
                 if (error) throw error;
             } else {
@@ -650,7 +658,7 @@ async function editCatchModal(catchId, isFieldCatch) {
                 const { error } = await supabaseManager.client
                     .from('catches')
                     .update(updateData)
-                    .eq('id', catchId);
+                    .eq('id', catchIdAsNumber);
 
                 if (error) throw error;
             }
