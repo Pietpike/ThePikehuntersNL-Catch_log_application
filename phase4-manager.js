@@ -383,10 +383,18 @@ function hidePhase4Screen() {
     if (phase4) {
         phase4.style.display = 'none';
     }
-    if (mainContent) mainContent.style.display = 'grid';
-    if (dataInput) dataInput.style.display = 'block';
+    if (mainContent) {
+        mainContent.style.display = 'grid';
+    }
+    if (dataInput) {
+        dataInput.style.display = 'block';
+    }
 
     window.currentSession = null;
+    enrichmentSession = null;
+    enrichmentCatches = [];
+
+    console.log('✓ Phase 4 hidden, app view restored');
 }
 
 /**

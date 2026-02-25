@@ -147,6 +147,11 @@
             color: white;
         }
         
+        .btn-secondary {
+            background: linear-gradient(135deg, #757575 0%, #616161 100%);
+            color: white;
+        }
+
         .btn-danger {
             background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);
             color: white;
@@ -1308,7 +1313,10 @@
                 <div style="margin-bottom: 20px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                         <h2 style="margin: 0; color: #1a1a1a;">📋 Concept Sessies</h2>
-                        <button class="btn btn-primary" onclick="loadUnprocessedSessions()">Vernieuwen</button>
+                        <div style="display: flex; gap: 10px;">
+                            <button class="btn btn-primary" onclick="loadUnprocessedSessions()">Vernieuwen</button>
+                            <button class="btn btn-secondary" onclick="hidePhase4Screen()">← Terug</button>
+                        </div>
                     </div>
                     <p style="color: #666; margin: 0;">Klik op een sessie om deze te verrijken en definitief te maken.</p>
                 </div>
