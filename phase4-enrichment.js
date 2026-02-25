@@ -468,12 +468,26 @@ async function deleteCatch(catchId, isFieldCatch) {
 async function editCatchModal(catchId, isFieldCatch) {
     console.log('✏️ EDIT BUTTON CLICKED!', { catchId, isFieldCatch });
 
-    // Vind de vangst in enrichmentCatches array
+    // 🔍 DEBUG: Log volledig enrichmentCatches array om structuur te zien
+    console.log('🔍 enrichmentCatches array:', enrichmentCatches);
+    console.log('🔍 enrichmentCatches length:', enrichmentCatches.length);
+    if (enrichmentCatches.length > 0) {
+        console.log('🔍 Eerste vangst structuur:', enrichmentCatches[0]);
+        console.log('🔍 Alle veldnamen in eerste vangst:', Object.keys(enrichmentCatches[0]));
+    }
+    console.log('🔍 Zoeken naar catchId:', catchId, 'type:', typeof catchId);
+
+    // Vind de vangst in enrichmentCatches array op id veld
     const catchToEdit = enrichmentCatches.find(c => c.id === catchId);
+    console.log('🔍 Gevonden vangst met c.id:', catchToEdit);
+
     if (!catchToEdit) {
+        console.error('❌ Vangst niet gevonden! catchId:', catchId);
         alert('Vangst niet gevonden');
         return;
     }
+
+    const catchToEdit_final = catchToEdit;
 
     // Bepaal tabel en origin
     const isFieldOrigin = isFieldCatch === 'true' || isFieldCatch === true;
@@ -546,12 +560,12 @@ async function editCatchModal(catchId, isFieldCatch) {
                 option.textContent = opt;
                 input.appendChild(option);
             });
-            input.value = catchToEdit[key] || '';
+            input.value = catchToEdit_final[key] || '';
         } else {
             input = document.createElement('input');
             input.type = type;
             input.style.cssText = 'padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9em;';
-            input.value = catchToEdit[key] || '';
+            input.value = catchToEdit_final[key] || '';
         }
 
         input.id = `edit_${key}`;
