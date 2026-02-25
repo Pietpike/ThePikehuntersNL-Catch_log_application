@@ -2005,35 +2005,51 @@ function saveLocations(locations) {
 
 // Enhanced smart dropdown creation function with new fields support + aas categories
 function createSmartDropdown(category, selectedValue = '', onChangeFunction = '', extraAttributes = '') {
-    const options = DropdownManager.getOptions(category);
-    
-    // Start building the select element
-    let html = `<select ${extraAttributes}`;
-    
-    // Add onchange if provided
-    if (onChangeFunction) {
-        html += ` onchange="${onChangeFunction}"`;
+    try {
+        // FIX: Add defensive checks for DropdownManager
+        if (!DropdownManager || typeof DropdownManager.getOptions !== 'function') {
+            console.error('[createSmartDropdown] DropdownManager not available');
+            return `<select disabled><option>— Fout: DropdownManager niet beschikbaar —</option></select>`;
+        }
+
+        const options = DropdownManager.getOptions(category);
+
+        if (!Array.isArray(options)) {
+            console.error('[createSmartDropdown] Invalid options for category:', category, options);
+            return `<select disabled><option>— Fout: Opties niet beschikbaar —</option></select>`;
+        }
+
+        // Start building the select element
+        let html = `<select ${extraAttributes}`;
+
+        // Add onchange if provided
+        if (onChangeFunction) {
+            html += ` onchange="${onChangeFunction}"`;
+        }
+
+        html += '>';
+
+        // Add default "select" option with new field indication
+        const isNewField = (category === 'zonschaduw' || category === 'bodemhardheid') ? ' (NIEUW)' : '';
+        const isAasField = category.startsWith('aas') ? ' (AAS - FASE 1.1.1)' : '';
+        html += `<option value="" ${selectedValue === '' ? 'selected' : ''}>- Selecteer ${category}${isNewField}${isAasField} -</option>`;
+
+        // Add all existing options
+        options.forEach(option => {
+            const selected = selectedValue === option ? 'selected' : '';
+            html += `<option value="${option}" ${selected}>${option}</option>`;
+        });
+
+        // Add "add new" option
+        html += `<option value="__ADD_NEW__" style="color: #4CAF50; font-weight: bold;">Nieuw item toevoegen...</option>`;
+
+        html += '</select>';
+
+        return html;
+    } catch (error) {
+        console.error('[createSmartDropdown] ERROR for category', category, ':', error);
+        return `<select disabled><option>— Fout bij laden dropdown —</option></select>`;
     }
-    
-    html += '>';
-    
-    // Add default "select" option with new field indication
-    const isNewField = (category === 'zonschaduw' || category === 'bodemhardheid') ? ' (NIEUW)' : '';
-    const isAasField = category.startsWith('aas') ? ' (AAS - FASE 1.1.1)' : '';
-    html += `<option value="" ${selectedValue === '' ? 'selected' : ''}>- Selecteer ${category}${isNewField}${isAasField} -</option>`;
-    
-    // Add all existing options
-    options.forEach(option => {
-        const selected = selectedValue === option ? 'selected' : '';
-        html += `<option value="${option}" ${selected}>${option}</option>`;
-    });
-    
-    // Add "add new" option
-    html += `<option value="__ADD_NEW__" style="color: #4CAF50; font-weight: bold;">Nieuw item toevoegen...</option>`;
-    
-    html += '</select>';
-    
-    return html;
 }
 
 // Enhanced advanced dropdown creation

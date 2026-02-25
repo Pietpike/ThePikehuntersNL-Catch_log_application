@@ -58,24 +58,40 @@ function renderEmptySessionsMessage(container) {
 }
 
 function createSessionElement(session, sessionIndex) {
-    const filteredWaypoints = getFilteredWaypoints(session);
-    const div = document.createElement('div');
-    div.className = 'session-item';
-    
-    // Enhanced session element with cloud sync awareness
-    const cloudInfo = getCloudSyncInfo();
-    if (cloudInfo.available && cloudInfo.teamMember) {
-        div.title = `Sessie ${sessionIndex + 1} - Cloud sync ready voor ${cloudInfo.teamMember}`;
+    try {
+        const filteredWaypoints = getFilteredWaypoints(session);
+        const div = document.createElement('div');
+        div.className = 'session-item';
+
+        // Enhanced session element with cloud sync awareness
+        const cloudInfo = getCloudSyncInfo();
+        if (cloudInfo.available && cloudInfo.teamMember) {
+            div.title = `Sessie ${sessionIndex + 1} - Cloud sync ready voor ${cloudInfo.teamMember}`;
+        }
+
+        console.log(`[createSessionElement] Creating session ${sessionIndex}:`, {
+            name: session.name,
+            hasIsManual: 'isManual' in session,
+            isManual: session.isManual,
+            hasTrackPoints: 'trackPoints' in session,
+            trackPointsIsArray: Array.isArray(session.trackPoints)
+        });
+
+        const sessionHeader = createSessionHeader(session, filteredWaypoints.length, cloudInfo);
+        const sessionInfo = createSessionInfo(session, cloudInfo);
+        const sessionFields = createSessionFields(session, sessionIndex);
+        const sessionButtons = createSessionButtons(sessionIndex, cloudInfo);
+        const waypointEditor = createWaypointEditor(session, sessionIndex);
+
+        console.log(`[createSessionElement] All parts created for session ${sessionIndex}`);
+
+        div.innerHTML = sessionHeader + sessionInfo + sessionFields + sessionButtons + waypointEditor;
+        return div;
+    } catch (error) {
+        console.error(`[createSessionElement] ERROR for session ${sessionIndex}:`, error);
+        console.error(`Stack: ${error.stack}`);
+        throw error;
     }
-    
-    const sessionHeader = createSessionHeader(session, filteredWaypoints.length, cloudInfo);
-    const sessionInfo = createSessionInfo(session, cloudInfo);
-    const sessionFields = createSessionFields(session, sessionIndex);
-    const sessionButtons = createSessionButtons(sessionIndex, cloudInfo);
-    const waypointEditor = createWaypointEditor(session, sessionIndex);
-    
-    div.innerHTML = sessionHeader + sessionInfo + sessionFields + sessionButtons + waypointEditor;
-    return div;
 }
 
 function getFilteredWaypoints(session) {
@@ -87,152 +103,222 @@ function getFilteredWaypoints(session) {
 }
 
 function createSessionHeader(session, waypointCount, cloudInfo) {
-    const cloudIcon = cloudInfo.available && cloudInfo.teamMember ? ' ☁️' : '';
-    const manualIcon = session.isManual ? ' 🖊️' : '';
-    
-    return `
-        <div class="session-header">
-            <div class="session-title">
-                <div class="session-color" style="background: ${session.color}"></div>
-                ${session.name}${cloudIcon}${manualIcon}
+    try {
+        const cloudIcon = cloudInfo.available && cloudInfo.teamMember ? ' ☁️' : '';
+        const manualIcon = (session.isManual === true) ? ' 🖊️' : '';
+
+        return `
+            <div class="session-header">
+                <div class="session-title">
+                    <div class="session-color" style="background: ${session.color}"></div>
+                    ${session.name}${cloudIcon}${manualIcon}
+                </div>
+                <span style="color: #666;">${waypointCount} vangsten</span>
             </div>
-            <span style="color: #666;">${waypointCount} vangsten</span>
-        </div>
-    `;
+        `;
+    } catch (error) {
+        console.error('[createSessionHeader] ERROR:', error);
+        throw error;
+    }
 }
 
 function createSessionInfo(session, cloudInfo) {
-    const formatTime = (date) => date.toLocaleTimeString('nl-NL', {
-        hour: '2-digit',
-        minute: '2-digit'
-    });
-    
-    const duration = Math.round((session.endTime - session.startTime) / 60000);
-    
-    // Enhanced session info with cloud sync context
-    const cloudStatus = cloudInfo.available && cloudInfo.teamMember ? 
-        `<br><small style="color: #2196F3;">☁️ Cloud sync: ${cloudInfo.teamMember}</small>` : '';
-    
-    const trackInfo = session.isManual ? 
-        '<small style="color: #999;">Handmatig toegevoegd</small>' :
-        `<small style="color: #999;">Track points: ${session.trackPoints.length}</small>`;
-    
-    return `
-        <div class="session-info">
-            <strong>Start:</strong> ${formatTime(session.startTime)}<br>
-            <strong>Eind:</strong> ${formatTime(session.endTime)}<br>
-            <strong>Duur:</strong> ${duration} min<br>
-            ${trackInfo}
-            ${cloudStatus}
-        </div>
-    `;
+    try {
+        const formatTime = (date) => date.toLocaleTimeString('nl-NL', {
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+
+        const duration = Math.round((session.endTime - session.startTime) / 60000);
+
+        // Enhanced session info with cloud sync context
+        const cloudStatus = cloudInfo.available && cloudInfo.teamMember ?
+            `<br><small style="color: #2196F3;">☁️ Cloud sync: ${cloudInfo.teamMember}</small>` : '';
+
+        // FIX: GPX sessions don't have isManual property - check properly
+        let trackInfo = '';
+        if (session.isManual) {
+            trackInfo = '<small style="color: #999;">Handmatig toegevoegd</small>';
+        } else if (session.trackPoints && Array.isArray(session.trackPoints)) {
+            trackInfo = `<small style="color: #999;">Track points: ${session.trackPoints.length}</small>`;
+        } else {
+            trackInfo = '<small style="color: #999;">Geen track points</small>';
+        }
+
+        return `
+            <div class="session-info">
+                <strong>Start:</strong> ${formatTime(session.startTime)}<br>
+                <strong>Eind:</strong> ${formatTime(session.endTime)}<br>
+                <strong>Duur:</strong> ${duration} min<br>
+                ${trackInfo}
+                ${cloudStatus}
+            </div>
+        `;
+    } catch (error) {
+        console.error('[createSessionInfo] ERROR:', error);
+        throw error;
+    }
 }
 
 function createSessionFields(session, sessionIndex) {
-    const locationField = createLocationField(session, sessionIndex);
-    const waterTypeField = createWaterTypeField(session, sessionIndex);
-    const currentField = createCurrentField(session, sessionIndex);
-    const temperatureField = createTemperatureField(session, sessionIndex);
-    const clarityField = createClarityField(session, sessionIndex);
-    
-    return `
-        <div style="border-top: 1px solid #e0e0e0; margin: 10px 0; padding-top: 10px;">
-            <div style="display: grid; gap: 8px;">
-                ${locationField}
-                ${waterTypeField}
-                ${currentField}
-                ${temperatureField}
-                ${clarityField}
+    try {
+        const locationField = createLocationField(session, sessionIndex);
+        const waterTypeField = createWaterTypeField(session, sessionIndex);
+        const currentField = createCurrentField(session, sessionIndex);
+        const temperatureField = createTemperatureField(session, sessionIndex);
+        const clarityField = createClarityField(session, sessionIndex);
+
+        return `
+            <div style="border-top: 1px solid #e0e0e0; margin: 10px 0; padding-top: 10px;">
+                <div style="display: grid; gap: 8px;">
+                    ${locationField}
+                    ${waterTypeField}
+                    ${currentField}
+                    ${temperatureField}
+                    ${clarityField}
+                </div>
             </div>
-        </div>
-    `;
+        `;
+    } catch (error) {
+        console.error('[createSessionFields] ERROR:', error);
+        throw error;
+    }
 }
 
 function createLocationField(session, sessionIndex) {
-    const locations = loadSavedLocations();
-    const cloudInfo = getCloudSyncInfo();
-    
-    // Enhanced location field with cloud sync tooltip
-    const locationTitle = cloudInfo.available && cloudInfo.teamMember ? 
-        `Locatie selecteren - Cloud sync ready voor ${cloudInfo.teamMember}` : 'Locatie selecteren';
-    
-    return `
-        <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="width: 20px;" title="${locationTitle}">📍</span>
-            <select style="flex: 1; padding: 4px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85em;" 
-                    onchange="updateSessionFieldWithCloudSync(${sessionIndex}, 'locatie', this.value)"
-                    title="${locationTitle}">
-                <option value="">+ Nieuwe locatie...</option>
-                <option value="" disabled>──────────</option>
-                ${locations.map(loc => 
-                    `<option value="${loc}" ${session.locatie === loc ? 'selected' : ''}>${loc}</option>`
-                ).join('')}
-            </select>
-        </div>
-    `;
+    try {
+        const locations = loadSavedLocations();
+
+        if (!Array.isArray(locations)) {
+            console.error('[createLocationField] locations is not an array:', locations);
+            return `<div style="color: red; padding: 10px;">Fout: Locaties kunnen niet worden geladen</div>`;
+        }
+
+        const cloudInfo = getCloudSyncInfo();
+
+        // Enhanced location field with cloud sync tooltip
+        const locationTitle = cloudInfo.available && cloudInfo.teamMember ?
+            `Locatie selecteren - Cloud sync ready voor ${cloudInfo.teamMember}` : 'Locatie selecteren';
+
+        return `
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="width: 20px;" title="${locationTitle}">📍</span>
+                <select style="flex: 1; padding: 4px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85em;"
+                        onchange="updateSessionFieldWithCloudSync(${sessionIndex}, 'locatie', this.value)"
+                        title="${locationTitle}">
+                    <option value="">+ Nieuwe locatie...</option>
+                    <option value="" disabled>──────────</option>
+                    ${locations.map(loc =>
+                        `<option value="${loc}" ${session.locatie === loc ? 'selected' : ''}>${loc}</option>`
+                    ).join('')}
+                </select>
+            </div>
+        `;
+    } catch (error) {
+        console.error('[createLocationField] ERROR:', error);
+        throw error;
+    }
 }
 
 function createWaterTypeField(session, sessionIndex) {
-    const cloudInfo = getCloudSyncInfo();
-    const waterTitle = cloudInfo.available && cloudInfo.teamMember ? 
-        `Watersoort - Cloud sync ready voor ${cloudInfo.teamMember}` : 'Watersoort';
-    
-    return `
-        <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="width: 20px;" title="${waterTitle}">💧</span>
-            ${createSmartDropdown('watersoort', session.watersoort || '', 
-                `handleDropdownChangeWithCloudSync(this, 'watersoort', (value) => updateSessionField(${sessionIndex}, 'watersoort', value))`,
-                `style="flex: 1; padding: 4px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85em;" title="${waterTitle}"`)}
-        </div>
-    `;
+    try {
+        const cloudInfo = getCloudSyncInfo();
+        const waterTitle = cloudInfo.available && cloudInfo.teamMember ?
+            `Watersoort - Cloud sync ready voor ${cloudInfo.teamMember}` : 'Watersoort';
+
+        // Escape title for safe attribute use
+        const safeWaterTitle = waterTitle.replace(/"/g, '&quot;');
+
+        const dropdown = createSmartDropdown('watersoort', session.watersoort || '',
+            `handleDropdownChangeWithCloudSync(this, 'watersoort', (value) => updateSessionField(${sessionIndex}, 'watersoort', value))`,
+            `style="flex: 1; padding: 4px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85em;" title="${safeWaterTitle}"`);
+
+        return `
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="width: 20px;" title="${safeWaterTitle}">💧</span>
+                ${dropdown}
+            </div>
+        `;
+    } catch (error) {
+        console.error('[createWaterTypeField] ERROR:', error);
+        throw error;
+    }
 }
 
 function createCurrentField(session, sessionIndex) {
-    const cloudInfo = getCloudSyncInfo();
-    const currentTitle = cloudInfo.available && cloudInfo.teamMember ? 
-        `Stroomsnelheid - Cloud sync ready voor ${cloudInfo.teamMember}` : 'Stroomsnelheid';
-    
-    return `
-        <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="width: 20px;" title="${currentTitle}">🌊</span>
-            ${createSmartDropdown('stroomsnelheid', session.stroomsnelheid || '', 
-                `handleDropdownChangeWithCloudSync(this, 'stroomsnelheid', (value) => updateSessionField(${sessionIndex}, 'stroomsnelheid', value))`,
-                `style="flex: 1; padding: 4px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85em;" title="${currentTitle}"`)}
-        </div>
-    `;
+    try {
+        const cloudInfo = getCloudSyncInfo();
+        const currentTitle = cloudInfo.available && cloudInfo.teamMember ?
+            `Stroomsnelheid - Cloud sync ready voor ${cloudInfo.teamMember}` : 'Stroomsnelheid';
+
+        // Escape title for safe attribute use
+        const safeCurrentTitle = currentTitle.replace(/"/g, '&quot;');
+
+        const dropdown = createSmartDropdown('stroomsnelheid', session.stroomsnelheid || '',
+            `handleDropdownChangeWithCloudSync(this, 'stroomsnelheid', (value) => updateSessionField(${sessionIndex}, 'stroomsnelheid', value))`,
+            `style="flex: 1; padding: 4px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85em;" title="${safeCurrentTitle}"`);
+
+        return `
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="width: 20px;" title="${safeCurrentTitle}">🌊</span>
+                ${dropdown}
+            </div>
+        `;
+    } catch (error) {
+        console.error('[createCurrentField] ERROR:', error);
+        throw error;
+    }
 }
 
 function createTemperatureField(session, sessionIndex) {
-    const cloudInfo = getCloudSyncInfo();
-    const tempTitle = cloudInfo.available && cloudInfo.teamMember ? 
-        `Phase B: Temperature validation active + Decimal normalization - Cloud sync ready voor ${cloudInfo.teamMember}` : 
-        'Phase B: Temperature validation active + Decimal normalization';
-    
-    return `
-        <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="width: 20px;">🌡️</span>
-            <input type="text" placeholder="Temp °C (3,5 of 3.5)" min="-5" max="35"
-                   style="flex: 1; padding: 4px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85em;"
-                   value="${session.watertemperatuur || ''}"
-                   onchange="updateSessionFieldWithValidationAndCloudSync(${sessionIndex}, 'watertemperatuur', this.value, this)"
-                   title="${tempTitle}">
-        </div>
-    `;
+    try {
+        const cloudInfo = getCloudSyncInfo();
+        const tempTitle = cloudInfo.available && cloudInfo.teamMember ?
+            `Phase B: Temperature validation active + Decimal normalization - Cloud sync ready voor ${cloudInfo.teamMember}` :
+            'Phase B: Temperature validation active + Decimal normalization';
+
+        // Escape title for safe attribute use
+        const safeTempTitle = tempTitle.replace(/"/g, '&quot;');
+
+        return `
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="width: 20px;">🌡️</span>
+                <input type="text" placeholder="Temp °C (3,5 of 3.5)" min="-5" max="35"
+                       style="flex: 1; padding: 4px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85em;"
+                       value="${session.watertemperatuur || ''}"
+                       onchange="updateSessionFieldWithValidationAndCloudSync(${sessionIndex}, 'watertemperatuur', this.value, this)"
+                       title="${safeTempTitle}">
+            </div>
+        `;
+    } catch (error) {
+        console.error('[createTemperatureField] ERROR:', error);
+        throw error;
+    }
 }
 
 function createClarityField(session, sessionIndex) {
-    const cloudInfo = getCloudSyncInfo();
-    const clarityTitle = cloudInfo.available && cloudInfo.teamMember ? 
-        `Helderheid - Cloud sync ready voor ${cloudInfo.teamMember}` : 'Helderheid';
-    
-    return `
-        <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="width: 20px;" title="${clarityTitle}">👁️</span>
-            ${createSmartDropdown('helderheid', session.helderheid || '', 
-                `handleDropdownChangeWithCloudSync(this, 'helderheid', (value) => updateSessionField(${sessionIndex}, 'helderheid', value))`,
-                `style="flex: 1; padding: 4px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85em;" title="${clarityTitle}"`)}
-        </div>
-    `;
+    try {
+        const cloudInfo = getCloudSyncInfo();
+        const clarityTitle = cloudInfo.available && cloudInfo.teamMember ?
+            `Helderheid - Cloud sync ready voor ${cloudInfo.teamMember}` : 'Helderheid';
+
+        // Escape title for safe attribute use
+        const safeClarityTitle = clarityTitle.replace(/"/g, '&quot;');
+
+        const dropdown = createSmartDropdown('helderheid', session.helderheid || '',
+            `handleDropdownChangeWithCloudSync(this, 'helderheid', (value) => updateSessionField(${sessionIndex}, 'helderheid', value))`,
+            `style="flex: 1; padding: 4px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85em;" title="${safeClarityTitle}"`);
+
+        return `
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="width: 20px;" title="${safeClarityTitle}">👁️</span>
+                ${dropdown}
+            </div>
+        `;
+    } catch (error) {
+        console.error('[createClarityField] ERROR:', error);
+        throw error;
+    }
 }
 
 function createSessionButtons(sessionIndex, cloudInfo) {
