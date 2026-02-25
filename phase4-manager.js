@@ -32,10 +32,11 @@ async function loadUnprocessedSessions() {
         console.log(`✓ Loaded ${fieldSessions?.length || 0} field sessions`);
 
         // Load handmatig aangemaakte sessies (sessions tabel)
+        // WHERE definitief = FALSE OR definitief IS NULL (oude sessies kunnen NULL hebben)
         const { data: manualSessions, error: manualError } = await supabaseManager.client
             .from('sessions')
             .select('*, catches(count)')
-            .eq('definitief', false)
+            .neq('definitief', true)
             .order('session_start_date', { ascending: false });
 
         if (manualError) throw manualError;

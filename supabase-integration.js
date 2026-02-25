@@ -1344,7 +1344,8 @@ async function processSingleSessionToDatabase(session, sessionIndex) {
             watersoort: session.watersoort || null,
             stroomsnelheid: session.stroomsnelheid || null,
             helderheid: session.helderheid || null,
-            watertemperatuur_measured: session.watertemperatuur ? parseFloat(session.watertemperatuur) : null
+            watertemperatuur_measured: session.watertemperatuur ? parseFloat(session.watertemperatuur) : null,
+            definitief: false
         };
         
         const sessionResponse = await insertSessionToDatabase(sessionData);
