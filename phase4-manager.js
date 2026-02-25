@@ -32,11 +32,12 @@ async function loadUnprocessedSessions() {
         console.log(`✓ Loaded ${fieldSessions?.length || 0} field sessions`);
 
         // Load handmatig aangemaakte sessies (sessions tabel)
-        // WHERE definitief = FALSE OR definitief IS NULL (oude sessies kunnen NULL hebben)
+        // WHERE definitief = FALSE AND genegeerd = FALSE
         const { data: manualSessions, error: manualError } = await supabaseManager.client
             .from('sessions')
             .select('*, catches(count)')
-            .neq('definitief', true)
+            .eq('definitief', false)
+            .eq('genegeerd', false)
             .order('session_start_date', { ascending: false });
 
         if (manualError) throw manualError;
@@ -217,28 +218,26 @@ function renderSessionCard(session) {
     const buttonGroup = document.createElement('div');
     buttonGroup.style.cssText = 'display: flex; gap: 8px; margin-top: 12px;';
 
+    // Bepaal session ID (veld-sessies hebben 'id', handmatige sessies hebben 'session_id')
+    const sessionId = session.origin === 'veld' ? session.id : session.session_id;
+
     // Verrijken button
     const enrichBtn = document.createElement('button');
     enrichBtn.className = 'btn btn-primary';
     enrichBtn.style.cssText = 'flex: 1; padding: 8px 12px; font-size: 0.9em;';
     enrichBtn.textContent = 'Verrijken →';
-    enrichBtn.onclick = () => openEnrichmentScreen(session.id, session.origin);
+    enrichBtn.onclick = () => openEnrichmentScreen(sessionId, session.origin);
 
-    // Verwijderen button (alleen voor veld-sessies)
+    // Verwijderen button (voor beide veld-sessies en handmatige sessies)
     const deleteBtn = document.createElement('button');
     deleteBtn.className = 'btn btn-danger';
     deleteBtn.style.cssText = 'flex: 1; padding: 8px 12px; font-size: 0.9em;';
     deleteBtn.textContent = '🗑️ Verwijderen';
-    deleteBtn.onclick = () => deleteSessionWithConfirm(session.id, session.origin);
+    deleteBtn.onclick = () => deleteSessionWithConfirm(sessionId, session.origin);
 
-    // Verwijder-knop is alleen voor veld-sessies
-    if (session.origin === 'veld') {
-        buttonGroup.appendChild(enrichBtn);
-        buttonGroup.appendChild(deleteBtn);
-    } else {
-        enrichBtn.style.flex = '1';
-        buttonGroup.appendChild(enrichBtn);
-    }
+    // Beide buttons altijd beschikbaar
+    buttonGroup.appendChild(enrichBtn);
+    buttonGroup.appendChild(deleteBtn);
 
     card.appendChild(buttonGroup);
     return card;
@@ -250,29 +249,38 @@ function renderSessionCard(session) {
 
 /**
  * Verwijdert sessie met bevestigingsdialoog
- * Voor veld-sessies: SET genegeerd = TRUE
+ * Voor veld-sessies: UPDATE field_sessions SET genegeerd = TRUE
+ * Voor handmatige sessies: UPDATE sessions SET genegeerd = TRUE
  */
 async function deleteSessionWithConfirm(sessionId, origin) {
-    if (origin !== 'veld') {
-        alert('Handmatige sessies kunnen niet worden verwijderd');
-        return;
-    }
-
     if (!confirm('Weet je zeker dat je deze sessie wilt verwijderen? Dit kan niet ongedaan worden gemaakt.')) {
         return;
     }
 
     try {
-        // UPDATE field_sessions SET genegeerd = TRUE
-        const { error } = await supabaseManager.client
-            .from('field_sessions')
-            .update({ genegeerd: true })
-            .eq('id', sessionId);
+        if (origin === 'veld') {
+            // Veld-sessie: UPDATE field_sessions SET genegeerd = TRUE
+            const { error } = await supabaseManager.client
+                .from('field_sessions')
+                .update({ genegeerd: true })
+                .eq('id', sessionId);
 
-        if (error) throw error;
+            if (error) throw error;
 
-        console.log('✓ Sessie gemarkeerd als genegeerd');
-        alert('Sessie verwijderd');
+            console.log('✓ Veld-sessie gemarkeerd als genegeerd');
+        } else {
+            // Handmatige sessie: UPDATE sessions SET genegeerd = TRUE
+            const { error } = await supabaseManager.client
+                .from('sessions')
+                .update({ genegeerd: true })
+                .eq('session_id', sessionId);
+
+            if (error) throw error;
+
+            console.log('✓ Handmatige sessie gemarkeerd als genegeerd');
+        }
+
+        showStatus('Sessie verwijderd', 'success');
 
         // Refresh overzicht
         loadUnprocessedSessions();
@@ -310,7 +318,7 @@ async function openEnrichmentScreen(sessionId, origin) {
             const { data, error } = await supabaseManager.client
                 .from('sessions')
                 .select('*')
-                .eq('id', sessionId)
+                .eq('session_id', sessionId)
                 .single();
 
             if (error) throw error;

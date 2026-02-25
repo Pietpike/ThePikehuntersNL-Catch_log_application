@@ -950,9 +950,9 @@ function addNewSessionWithCloudSync() {
     }
     
     const newSessionIndex = sessions.length;
-    
-    // Maak nieuwe sessie
-    sessions.push({
+
+    // Maak nieuwe sessie object
+    const newSession = {
         id: newSessionIndex + 1,
         name: `Sessie ${newSessionIndex + 1}`,
         startTime: newStartDate,
@@ -962,8 +962,64 @@ function addNewSessionWithCloudSync() {
         color: CONFIG.sessionColors[newSessionIndex % CONFIG.sessionColors.length],
         fileName: 'Handmatig toegevoegd',
         isManual: true
-    });
-    
+    };
+
+    // Sla direct op in Supabase voor handmatig aangemaakte sessies
+    if (cloudInfo.available && cloudInfo.teamMember && typeof supabaseManager !== 'undefined' && supabaseManager.client) {
+        try {
+            console.log('💾 Saving manual session directly to Supabase...');
+
+            const toLocalISOString = (date) => {
+                const offset = date.getTimezoneOffset();
+                const localDate = new Date(date.getTime() - offset * 60 * 1000);
+                return localDate.toISOString().split('Z')[0];
+            };
+
+            const sessionData = {
+                team_member: supabaseManager.teamMember,
+                sessie_naam: `Handmatig - ${dateStr}`,
+                gpx_filename: null,
+                session_start_datetime: toLocalISOString(newStartDate),
+                session_end_datetime: toLocalISOString(newEndDate),
+                session_start_date: dateStr,
+                session_start_hour: newStartDate.getHours(),
+                session_start_month: newStartDate.getMonth() + 1,
+                locatie: null,
+                watersoort: null,
+                stroomsnelheid: null,
+                helderheid: null,
+                watertemperatuur_measured: null,
+                definitief: false,
+                genegeerd: false
+            };
+
+            supabaseManager.client
+                .from('sessions')
+                .insert(sessionData)
+                .select()
+                .then(result => {
+                    if (result.error) {
+                        console.error('❌ Error saving session to Supabase:', result.error);
+                        showStatus(`Waarschuwing: Sessie niet opgeslagen in database: ${result.error.message}`, 'warning');
+                    } else if (result.data && result.data.length > 0) {
+                        console.log('✅ Session saved to Supabase with ID:', result.data[0].session_id);
+                        newSession.supabaseId = result.data[0].session_id;
+                        showStatus(`Sessie opgeslagen: ${dateStr} (${startTime} - ${endTime})`, 'success');
+                    }
+                })
+                .catch(err => {
+                    console.error('❌ Supabase save error:', err);
+                    showStatus(`Error: ${err.message}`, 'error');
+                });
+        } catch (err) {
+            console.error('Error saving to Supabase:', err);
+            showStatus(`Error: ${err.message}`, 'error');
+        }
+    }
+
+    // Voeg toe aan lokale array
+    sessions.push(newSession);
+
     // Sorteer en hernummer sessies
     sessions.sort((a, b) => a.startTime - b.startTime);
     sessions.forEach((s, idx) => {
@@ -971,23 +1027,23 @@ function addNewSessionWithCloudSync() {
         s.name = `Sessie ${idx + 1}`;
         s.color = CONFIG.sessionColors[idx % CONFIG.sessionColors.length];
     });
-    
+
     // Update UI
     updateSessionsList();
     updateTrackColors();
     updateStats();
     updateDataTable();
-    
+
     if (typeof updateValidationInRealTime === 'function') {
         updateValidationInRealTime();
     }
-    
+
     if (typeof updateCloudSyncStatus === 'function') {
         updateCloudSyncStatus();
     }
-    
-    const cloudText = cloudInfo.available && cloudInfo.teamMember ? 
-        ` (Cloud sync ready voor ${cloudInfo.teamMember})` : '';
+
+    const cloudText = cloudInfo.available && cloudInfo.teamMember ?
+        ` (Database) ` : ' (lokaal) ';
     showStatus(`Nieuwe sessie toegevoegd voor ${dateStr} (${startTime} - ${endTime})${cloudText}`, 'success');
 }
 
