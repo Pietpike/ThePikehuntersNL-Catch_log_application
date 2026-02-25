@@ -411,6 +411,49 @@ function renderCatchesTable(catches) {
 }
 
 // ====================================
+// Helper: Aas Selector voor Enrichment
+// ====================================
+
+/**
+ * Opent aas selector modal voor enrichment formulier
+ * Integreert met bestaande lure-interface.js
+ */
+function openLureModalForEnrichment(inputElement, catchId) {
+    // Sla de huidige catchId op zodat selectLure deze kan gebruiken
+    window.enrichmentCatchIdForLure = catchId;
+
+    // Sla de originele selectLure functie op
+    window.originalSelectLure = window.selectLure;
+
+    // Override selectLure temporair om in enrichmentData op te slaan
+    window.selectLure = function(lureName) {
+        console.log(`🎣 Selected lure: ${lureName} for catch ${catchId}`);
+
+        // Update input element
+        inputElement.value = lureName;
+
+        // Sla op in window.catchEnrichmentData
+        if (!window.catchEnrichmentData[catchId]) {
+            window.catchEnrichmentData[catchId] = {};
+        }
+        window.catchEnrichmentData[catchId].aas = lureName;
+
+        console.log(`💾 Stored aas in enrichmentData[${catchId}]:`, window.catchEnrichmentData[catchId]);
+
+        // Sluit modal
+        window.originalSelectLure(lureName);
+
+        // Restore originele selectLure functie
+        window.selectLure = window.originalSelectLure;
+        delete window.enrichmentCatchIdForLure;
+        delete window.originalSelectLure;
+    };
+
+    // Open de bestaande lure modal
+    openLureModal(inputElement);
+}
+
+// ====================================
 // STAP 6: Add/Edit/Delete Catches
 // ====================================
 
@@ -613,11 +656,43 @@ async function editCatchModal(catchId, isFieldCatch) {
     // ============================================================
     addSectionHeader('✨ Verrijking (opslaan in sessie, nog niet in database)');
 
-    // Velden die voorkomen in beide types
-    fields.aas = addField('Aas', 'aas', 'select',
-        ['Kunstaaas', 'Natuurlijke aas', 'Paste', 'Corn', 'Boilie', 'Lever', 'Bloedworm'],
-        existingEnrichment.aas
-    );
+    // Aas veld met LureManager integratie (speciaal veld!)
+    const aasDiv = document.createElement('div');
+    aasDiv.style.cssText = 'display: flex; flex-direction: column;';
+
+    const aasLabel = document.createElement('label');
+    aasLabel.textContent = 'Aas';
+    aasLabel.style.cssText = 'font-weight: 600; margin-bottom: 5px; font-size: 0.9em; color: #333;';
+    aasDiv.appendChild(aasLabel);
+
+    const aasInputWrapper = document.createElement('div');
+    aasInputWrapper.style.cssText = 'display: flex; gap: 5px;';
+
+    const aasInput = document.createElement('input');
+    aasInput.id = `edit_aas`;
+    aasInput.type = 'text';
+    aasInput.value = existingEnrichment.aas || '';
+    aasInput.placeholder = 'Klik "Kies aas" knop';
+    aasInput.style.cssText = 'flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9em; background: #f5f5f5;';
+    aasInput.readOnly = true;
+    aasInputWrapper.appendChild(aasInput);
+
+    const aasBtn = document.createElement('button');
+    aasBtn.type = 'button';
+    aasBtn.textContent = '🔍 Kies aas';
+    aasBtn.style.cssText = 'padding: 8px 12px; background: #1976D2; color: white; border: none; border-radius: 4px; font-size: 0.85em; cursor: pointer; white-space: nowrap;';
+    aasBtn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openLureModalForEnrichment(aasInput, catchIdAsNumber);
+        return false;
+    };
+    aasInputWrapper.appendChild(aasBtn);
+
+    aasDiv.appendChild(aasInputWrapper);
+    form.appendChild(aasDiv);
+
+    fields.aas = aasInput;
     fields.techniek = addField('Techniek', 'techniek', 'select',
         ['Dropshot', 'Jiggen', 'C-rig', 'T-rig', 'Trollen', 'Spinning', 'Verticalen', 'Jerk', 'Twitch', 'N-rig', 'Cheb-rig'],
         existingEnrichment.techniek
@@ -728,10 +803,19 @@ async function editCatchModal(catchId, isFieldCatch) {
             // ============================================================
             const enrichmentData = {};
 
+            // Aas naam (niet ID!)
             if (fields.aas.value) enrichmentData.aas = fields.aas.value;
+
+            // Techniek
             if (fields.techniek.value) enrichmentData.techniek = fields.techniek.value;
+
+            // Diepte
             if (fields.diepte.value) enrichmentData.diepte = parseInt(fields.diepte.value);
-            if (fields.bodemhardheid.value) enrichmentData.bodemhardheid = fields.bodemhardheid.value;
+
+            // Bodem hardheid
+            if (fields.bodemhardheid.value) enrichmentData.bodem_hardheid = fields.bodemhardheid.value;
+
+            // Override velden
             if (fields.helderheid_override.value) enrichmentData.helderheid_override = fields.helderheid_override.value;
             if (fields.stroomsnelheid_override.value) enrichmentData.stroomsnelheid_override = fields.stroomsnelheid_override.value;
             if (fields.watertemperatuur_override.value) enrichmentData.watertemperatuur_override = parseInt(fields.watertemperatuur_override.value);
@@ -739,6 +823,8 @@ async function editCatchModal(catchId, isFieldCatch) {
             if (Object.keys(enrichmentData).length > 0) {
                 window.catchEnrichmentData[catchIdAsNumber] = enrichmentData;
                 console.log(`💾 Groep 2: Storing enrichment data for catch ${catchIdAsNumber}:`, enrichmentData);
+            } else {
+                console.log(`💾 Groep 2: No enrichment data to store for catch ${catchIdAsNumber}`);
             }
 
             console.log('✅ Catch updated successfully (Groep 1 → database, Groep 2 → window.catchEnrichmentData)');

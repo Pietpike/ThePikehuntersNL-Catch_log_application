@@ -276,6 +276,40 @@ async function makeSessionFinal() {
             console.log(`✓ Session inserted with ID: ${newSessionId}`);
         }
 
+        // ===== STAP 2.5: Process Aas Names to IDs =====
+        console.log('Step 2.5: Processing aas names to IDs...');
+
+        // Verzamel alle aas namen uit enrichmentData
+        const aasNamesUsed = new Set();
+        Object.values(window.catchEnrichmentData || {}).forEach(enrichData => {
+            if (enrichData.aas) {
+                aasNamesUsed.add(enrichData.aas);
+            }
+        });
+
+        let aasIdMapping = {};
+        if (aasNamesUsed.size > 0) {
+            try {
+                // Gebruiken bestaande processSessionAasjes logica als beschikbaar
+                if (typeof processSessionAasjes === 'function') {
+                    // Create temporary session object met aas data
+                    const tempSession = {
+                        waypoints: enrichmentCatches.map(catch_ => ({
+                            catchData: window.catchEnrichmentData[catch_.id] || {}
+                        }))
+                    };
+                    const aasResult = await processSessionAasjes(tempSession);
+                    aasIdMapping = aasResult.idMapping || {};
+                    console.log('✓ Aas names processed to IDs:', aasIdMapping);
+                } else {
+                    console.warn('processSessionAasjes not available, using aas names directly');
+                }
+            } catch (error) {
+                console.warn('Error processing aas names:', error);
+                // Fallback: continue without aas_id mapping
+            }
+        }
+
         // ===== STAP 3: Insert Catches =====
         console.log('Step 3: Inserting catches...');
 
@@ -303,11 +337,25 @@ async function makeSessionFinal() {
             const enrichmentData = window.catchEnrichmentData[catch_.id];
             if (enrichmentData) {
                 console.log(`💾 Adding enrichment data for catch ${catch_.id}:`, enrichmentData);
-                if (enrichmentData.aas) catchRecord.aas = enrichmentData.aas;
+
+                // Aas: Probeer aas_id te gebruiken, fallback naar naam
+                if (enrichmentData.aas) {
+                    const aasId = aasIdMapping[enrichmentData.aas];
+                    if (aasId) {
+                        catchRecord.aas_id = aasId;
+                        console.log(`   - aas: "${enrichmentData.aas}" → aas_id: ${aasId}`);
+                    } else {
+                        // Fallback: opslaan als naam (niet ideal maar veilig)
+                        catchRecord.aas = enrichmentData.aas;
+                        console.log(`   - aas: "${enrichmentData.aas}" (no ID mapping found)`);
+                    }
+                }
+
                 if (enrichmentData.techniek) catchRecord.techniek = enrichmentData.techniek;
                 if (enrichmentData.diepte) catchRecord.diepte = enrichmentData.diepte;
-                if (enrichmentData.bodemhardheid) catchRecord.bodemhardheid = enrichmentData.bodemhardheid;
-                // Override velden - alleen gebruiken als niet al ingesteld in sessie
+                if (enrichmentData.bodem_hardheid) catchRecord.bodem_hardheid = enrichmentData.bodem_hardheid;
+
+                // Override velden
                 if (enrichmentData.helderheid_override) catchRecord.helderheid = enrichmentData.helderheid_override;
                 if (enrichmentData.stroomsnelheid_override) catchRecord.stroomsnelheid = enrichmentData.stroomsnelheid_override;
                 if (enrichmentData.watertemperatuur_override) catchRecord.watertemperatuur_measured = enrichmentData.watertemperatuur_override;
