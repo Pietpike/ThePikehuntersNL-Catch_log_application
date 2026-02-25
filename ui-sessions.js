@@ -978,9 +978,14 @@ function addNewSessionWithCloudSync() {
                 return localDate.toISOString().split('Z')[0];
             };
 
+            // Genereer unieke sessienaam met timestamp en korte random ID
+            const timeStr = `${String(newStartDate.getHours()).padStart(2, '0')}:${String(newStartDate.getMinutes()).padStart(2, '0')}`;
+            const randomId = Math.random().toString(36).substring(2, 8).toUpperCase();
+            const uniqueSessionName = `Handmatig - ${dateStr} ${timeStr} - ${randomId}`;
+
             const sessionData = {
                 team_member: supabaseManager.teamMember,
-                sessie_naam: `Handmatig - ${dateStr}`,
+                sessie_naam: uniqueSessionName,
                 gpx_filename: null,
                 session_start_datetime: toLocalISOString(newStartDate),
                 session_end_datetime: toLocalISOString(newEndDate),
