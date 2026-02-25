@@ -68,7 +68,6 @@ async function loadSessionForEnrichment(sessionId) {
             .from('field_catches')
             .select('*')
             .eq('field_session_id', sessionId)
-            .eq('genegeerd', false)
             .order('vangst_tijd', { ascending: true });
 
         if (catchError) throw catchError;
