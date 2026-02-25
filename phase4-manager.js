@@ -46,14 +46,41 @@ async function loadUnprocessedSessions() {
         // Combineer en transform
         const allSessions = [];
 
+        // Helper: Normaliseer datum naar YYYY-MM-DD formaat
+        const normalizeDateToISO = (dateValue) => {
+            if (!dateValue) return null;
+
+            // Als het al ISO formaat is (YYYY-MM-DD), return as-is
+            if (typeof dateValue === 'string' && dateValue.match(/^\d{4}-\d{2}-\d{2}/)) {
+                return dateValue.split('T')[0]; // Verwijder tijd als aanwezig
+            }
+
+            // Probeer de datum te parsen als Date object
+            if (dateValue instanceof Date) {
+                return dateValue.toISOString().split('T')[0];
+            }
+
+            // Als het een string is, probeer het te parsen
+            if (typeof dateValue === 'string') {
+                const parsed = new Date(dateValue);
+                if (!isNaN(parsed.getTime())) {
+                    return parsed.toISOString().split('T')[0];
+                }
+            }
+
+            return null;
+        };
+
         // Voeg veld-sessies toe met origin = 'veld'
         if (fieldSessions && fieldSessions.length > 0) {
             fieldSessions.forEach(session => {
+                const normalizedDate = normalizeDateToISO(session.datum);
                 allSessions.push({
                     ...session,
                     origin: 'veld',
                     catchCount: session.field_catches?.[0]?.count || 0,
-                    date: session.datum,
+                    date: normalizedDate,
+                    rawDateValue: session.datum, // Voor debugging
                     startTime: session.start_tijd,
                     endTime: session.eind_tijd,
                     location: session.locatie
@@ -64,11 +91,13 @@ async function loadUnprocessedSessions() {
         // Voeg handmatige sessies toe met origin = 'handmatig'
         if (manualSessions && manualSessions.length > 0) {
             manualSessions.forEach(session => {
+                const normalizedDate = normalizeDateToISO(session.session_start_date);
                 allSessions.push({
                     ...session,
                     origin: 'handmatig',
                     catchCount: session.catches?.[0]?.count || 0,
-                    date: session.session_start_date,
+                    date: normalizedDate,
+                    rawDateValue: session.session_start_date, // Voor debugging
                     startTime: session.session_start_datetime,
                     endTime: session.session_end_datetime,
                     location: session.locatie
@@ -76,11 +105,10 @@ async function loadUnprocessedSessions() {
             });
         }
 
-        // Sorteer op datum DESC
+        // Sorteer op datum DESC (dates zijn al in YYYY-MM-DD formaat, dus string compare werkt)
         allSessions.sort((a, b) => {
-            const dateA = new Date(a.date);
-            const dateB = new Date(b.date);
-            return dateB - dateA;
+            if (!a.date || !b.date) return 0;
+            return b.date.localeCompare(a.date); // YYYY-MM-DD strings zijn lexicographisch sorteerbaar
         });
 
         console.log(`📊 Total unprocessed sessions: ${allSessions.length}`);
@@ -113,10 +141,20 @@ function renderSessionOverview(sessions) {
         return;
     }
 
-    // Groepeer op datum
+    // Groepeer op datum (zonder new Date() parsing om formaat-problemen te voorkomen)
     const groupedByDate = {};
     sessions.forEach(session => {
-        const dateKey = new Date(session.date).toLocaleDateString('nl-NL', {
+        // session.date is al genormaliseerd naar YYYY-MM-DD formaat
+        if (!session.date) {
+            console.warn('⚠️ Session zonder geldige datum:', session);
+            return;
+        }
+
+        // Zet YYYY-MM-DD string om naar Nederlands datumformaat
+        const [year, month, day] = session.date.split('-');
+        const dateObj = new Date(parseInt(year), parseInt(month) - 1, parseInt(day)); // Maanden zijn 0-indexed
+
+        const dateKey = dateObj.toLocaleDateString('nl-NL', {
             weekday: 'long',
             year: 'numeric',
             month: 'long',
