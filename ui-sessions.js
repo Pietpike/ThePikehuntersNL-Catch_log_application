@@ -893,9 +893,9 @@ function addNewSessionWithCloudSync() {
         `• Laat leeg voor vandaag (${defaultDateStr})`,
         ''
     );
-    
+
     if (dateInput === null) return; // Geannuleerd
-    
+
     // Parse datum
     let sessionDate;
     if (!dateInput.trim()) {

@@ -75,13 +75,6 @@ async function loadUnprocessedSessions() {
         if (fieldSessions && fieldSessions.length > 0) {
             fieldSessions.forEach(session => {
                 const normalizedDate = normalizeDateToISO(session.datum);
-                // 🔍 DEBUG: Log ruwe waarde en genormaliseerde waarde
-                console.log('🎯 FIELD SESSION - RAW DATUM:', {
-                    rawValue: session.datum,
-                    type: typeof session.datum,
-                    normalized: normalizedDate,
-                    sessionName: session.sessie_naam
-                });
                 allSessions.push({
                     ...session,
                     origin: 'veld',
@@ -99,13 +92,6 @@ async function loadUnprocessedSessions() {
         if (manualSessions && manualSessions.length > 0) {
             manualSessions.forEach(session => {
                 const normalizedDate = normalizeDateToISO(session.session_start_date);
-                // 🔍 DEBUG: Log ruwe waarde en genormaliseerde waarde
-                console.log('📝 MANUAL SESSION - RAW SESSION_START_DATE:', {
-                    rawValue: session.session_start_date,
-                    type: typeof session.session_start_date,
-                    normalized: normalizedDate,
-                    sessionName: session.sessie_naam
-                });
                 allSessions.push({
                     ...session,
                     origin: 'handmatig',
@@ -175,17 +161,11 @@ function renderSessionOverview(sessions) {
             day: 'numeric'
         });
 
-        // 🔍 DEBUG: Log groeperings-informatie
-        console.log(`📊 GROUPING [${session.origin}]: ${session.rawDateValue} → normalized: ${session.date} → dateKey: "${dateKey}"`);
-
         if (!groupedByDate[dateKey]) {
             groupedByDate[dateKey] = [];
         }
         groupedByDate[dateKey].push(session);
     });
-
-    // 🔍 DEBUG: Log finale groepering
-    console.log('📋 FINAL GROUPED DATES:', Object.keys(groupedByDate));
 
     // Render per datum-groep
     Object.entries(groupedByDate).forEach(([dateKey, sessionsInDate]) => {
