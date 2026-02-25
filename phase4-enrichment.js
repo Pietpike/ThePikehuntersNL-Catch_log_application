@@ -582,17 +582,35 @@ async function editCatchModal(catchId, isFieldCatch) {
         return input;
     };
 
-    // Voeg velden toe
-    const fields = {
-        soort: addField('Soort *', 'soort', 'select', ['Snoek', 'Snoekbaars', 'Baars', 'Roofblei', 'Meerval', 'Winde', 'Grondel']),
-        lengte: addField('Lengte (cm) *', 'lengte', 'number'),
-        aantal: addField('Aantal', 'aantal', 'number'),
-        vangst_tijd: addField('Vangst Tijd', isFieldOrigin ? 'vangst_tijd' : 'catch_datetime', 'datetime-local'),
-        notities: addField('Notities', isFieldOrigin ? 'notities' : 'waypoint_naam', 'text'),
-        techniek: addField('Techniek', 'techniek', 'select', ['Dropshot', 'Jiggen', 'C-rig', 'T-rig', 'Trollen', 'Spinning', 'Verticalen', 'Jerk', 'Twitch', 'N-rig', 'Cheb-rig']),
-        diepte: addField('Diepte', 'diepte', 'number'),
-        bodemhardheid: addField('Bodemhardheid', 'bodemhardheid', 'select', ['Hard', 'Medium', 'Zacht', 'Onbekend']),
-    };
+    // Voeg velden toe - afhankelijk van sessie type
+    const fields = {};
+
+    // Velden die voor beide types bestaan
+    fields.soort = addField('Soort *', 'soort', 'select', ['Snoek', 'Snoekbaars', 'Baars', 'Roofblei', 'Meerval', 'Winde', 'Grondel']);
+    fields.lengte = addField('Lengte (cm) *', 'lengte', 'number');
+    fields.aantal = addField('Aantal', 'aantal', 'number');
+
+    // Tijd en notities velden - andere kolom namen afhankelijk van type
+    if (isFieldOrigin) {
+        // field_catches: slechts 5 kolommen ondersteund
+        fields.vangst_tijd = addField('Vangst Tijd', 'vangst_tijd', 'datetime-local');
+        fields.notities = addField('Notities', 'notities', 'text');
+
+        // Informatie message voor field_sessions
+        const infoDiv = document.createElement('div');
+        infoDiv.style.cssText = 'grid-column: 1/-1; padding: 10px; background: #e3f2fd; border-radius: 4px; font-size: 0.85em; color: #01579b;';
+        infoDiv.innerHTML = 'ℹ️ <strong>Veld-sessie:</strong> Alleen basis velden kunnen hier worden bewerkt. Extra velden worden toegevoegd bij definitief maken.';
+        form.appendChild(infoDiv);
+    } else {
+        // catches: ondersteunt meer kolommen
+        fields.catch_datetime = addField('Vangst Tijd', 'catch_datetime', 'datetime-local');
+        fields.waypoint_naam = addField('Notities', 'waypoint_naam', 'text');
+
+        // Extra velden alleen voor reguliere sessies
+        fields.techniek = addField('Techniek', 'techniek', 'select', ['Dropshot', 'Jiggen', 'C-rig', 'T-rig', 'Trollen', 'Spinning', 'Verticalen', 'Jerk', 'Twitch', 'N-rig', 'Cheb-rig']);
+        fields.diepte = addField('Diepte', 'diepte', 'number');
+        fields.bodemhardheid = addField('Bodemhardheid', 'bodemhardheid', 'select', ['Hard', 'Medium', 'Zacht', 'Onbekend']);
+    }
 
     modalContent.appendChild(form);
 
@@ -625,54 +643,60 @@ async function editCatchModal(catchId, isFieldCatch) {
         try {
             console.log('💾 Saving catch edit...');
 
-            // Basis velden die beide tabellen hebben
-            const baseUpdateData = {
+            // Basis velden - altijd aanwezig
+            const updateData = {
                 soort: fields.soort.value,
                 lengte: parseInt(fields.lengte.value),
                 aantal: parseInt(fields.aantal.value) || 1,
             };
 
-            // Voeg techniek en diepte toe als opgegeven
-            if (fields.techniek.value) {
-                baseUpdateData.techniek = fields.techniek.value;
-            }
-            if (fields.diepte.value) {
-                baseUpdateData.diepte = parseInt(fields.diepte.value);
-            }
-
-            // Voeg time en notes toe afhankelijk van origin
             if (isFieldOrigin) {
+                // field_catches: SLECHTS 5 kolommen ondersteund
+                // id, field_session_id, user_id, vangst_tijd, soort, lengte, aantal, gps_lat, gps_lng, notities, session_id, catch_id, created_at
+
                 if (fields.vangst_tijd.value) {
-                    baseUpdateData.vangst_tijd = new Date(fields.vangst_tijd.value).toISOString();
+                    updateData.vangst_tijd = new Date(fields.vangst_tijd.value).toISOString();
                 }
                 if (fields.notities.value) {
-                    baseUpdateData.notities = fields.notities.value;
+                    updateData.notities = fields.notities.value;
                 }
 
-                // Update field_catches (beperkte velden)
+                console.log('💾 Updating field_catches with:', updateData);
+
+                // Update field_catches - ALLEEN basis velden + vangst_tijd + notities
                 const { error } = await supabaseManager.client
                     .from('field_catches')
-                    .update(baseUpdateData)
+                    .update(updateData)
                     .eq('id', catchIdAsNumber);
 
                 if (error) throw error;
             } else {
-                if (fields.vangst_tijd.value) {
-                    baseUpdateData.catch_datetime = new Date(fields.vangst_tijd.value).toISOString();
+                // catches: ondersteunt meer kolommen
+
+                if (fields.catch_datetime.value) {
+                    updateData.catch_datetime = new Date(fields.catch_datetime.value).toISOString();
                 }
-                if (fields.notities.value) {
-                    baseUpdateData.waypoint_naam = fields.notities.value;
+                if (fields.waypoint_naam.value) {
+                    updateData.waypoint_naam = fields.waypoint_naam.value;
                 }
 
-                // Voeg bodemhardheid toe voor catches (catches tabel heeft deze kolom)
-                if (fields.bodemhardheid.value) {
-                    baseUpdateData.bodemhardheid = fields.bodemhardheid.value;
+                // Extra velden alleen voor catches
+                if (fields.techniek && fields.techniek.value) {
+                    updateData.techniek = fields.techniek.value;
+                }
+                if (fields.diepte && fields.diepte.value) {
+                    updateData.diepte = parseInt(fields.diepte.value);
+                }
+                if (fields.bodemhardheid && fields.bodemhardheid.value) {
+                    updateData.bodemhardheid = fields.bodemhardheid.value;
                 }
 
-                // Update catches (volledige velden)
+                console.log('💾 Updating catches with:', updateData);
+
+                // Update catches - volledige set velden
                 const { error } = await supabaseManager.client
                     .from('catches')
-                    .update(baseUpdateData)
+                    .update(updateData)
                     .eq('id', catchIdAsNumber);
 
                 if (error) throw error;
