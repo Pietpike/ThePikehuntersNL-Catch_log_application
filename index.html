@@ -1066,6 +1066,58 @@
         .brand-add-btn:hover {
             background: #45a049;
         }
+        /* ========================================
+           FASE 4: Concept Sessies Styling
+           ======================================== */
+
+        .phase4-screen {
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .phase4-date-group {
+            margin-bottom: 20px;
+        }
+
+        .phase4-origin-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 0.75em;
+            font-weight: 600;
+        }
+
+        .phase4-session-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            background: white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            transition: all 0.3s ease;
+        }
+
+        .phase4-session-card:hover {
+            box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+            transform: translateY(-2px);
+        }
+
+        #phase4Container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            min-height: 600px;
+        }
+
     </style>
 </head>
 <body>
@@ -1139,6 +1191,8 @@
             </div>
             
             <button class="btn btn-info" onclick="DataManager.showManager()" title="Beheer locaties en dropdown opties">🔧 Data Beheer</button>
+
+            <button class="btn btn-info" onclick="showPhase4Screen();" title="Verwerk onverwerkte sessies en veld-vangsten">📋 Concept Sessies</button>
 
             <button class="btn btn-warning" onclick="clearAll()">🔄 Reset Alles</button>
             <button class="btn debug-button" onclick="debugInfo.show()">🔧 Debug Info</button>
@@ -1244,6 +1298,46 @@
                     <tbody id="dataTableBody">
                     </tbody>
                 </table>
+            </div>
+        </div>
+
+        <!-- FASE 4: Concept Sessies Container -->
+        <div id="phase4Container" style="display: none; padding: 20px; background: white;">
+            <!-- Scherm 4A: Startscherm -->
+            <div id="phase4OverviewScreen" class="phase4-screen">
+                <div style="margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h2 style="margin: 0; color: #1a1a1a;">📋 Concept Sessies</h2>
+                        <button class="btn btn-primary" onclick="loadUnprocessedSessions()">Vernieuwen</button>
+                    </div>
+                    <p style="color: #666; margin: 0;">Klik op een sessie om deze te verrijken en definitief te maken.</p>
+                </div>
+                <div id="phase4OverviewContent" style="min-height: 400px;"></div>
+            </div>
+
+            <!-- Scherm 4B: Verrijkingsscherm -->
+            <div id="phase4Enrichment" class="phase4-screen" style="display: none;">
+                <h2 style="margin: 0 0 20px 0; color: #1a1a1a;">🔧 Sessie Verrijken</h2>
+                <div id="phase4EnrichmentContent" style="min-height: 600px;">
+                    <!-- Wordt gevuld door phase4-enrichment.js -->
+                </div>
+                <div style="margin-top: 20px; display: flex; gap: 10px;">
+                    <button class="btn btn-primary" onclick="backToOverview()">← Terug naar Overzicht</button>
+                    <button class="btn btn-success" onclick="goToValidation()">Volgende → Validatie</button>
+                </div>
+            </div>
+
+            <!-- Scherm 4C: Validatie & Definitief Maken -->
+            <div id="phase4Validation" class="phase4-screen" style="display: none;">
+                <h2 style="margin: 0 0 20px 0; color: #1a1a1a;">✅ Validatie & Definitief Maken</h2>
+                <div id="phase4ValidationContent" style="min-height: 400px;">
+                    <!-- Wordt gevuld door phase4-validation.js -->
+                </div>
+                <div style="margin-top: 20px; display: flex; gap: 10px;">
+                    <button class="btn btn-primary" onclick="backToEnrichment()">← Terug naar Verrijking</button>
+                    <button class="btn btn-warning" onclick="validateSession()">🔍 Valideer</button>
+                    <button class="btn btn-success" id="finalizeBtn" disabled onclick="makeSessionFinal()">✓ Definitief Maken</button>
+                </div>
             </div>
         </div>
 
@@ -1399,6 +1493,7 @@
     <script src="lure-interface.js"></script>
     <script src="supabase-integration.js"></script>
     <script src="app-core.js"></script>
+    <script src="phase4-manager.js"></script>
 
     <!-- ✅ STAP 3: Authentication check bij app start -->
     <script>
