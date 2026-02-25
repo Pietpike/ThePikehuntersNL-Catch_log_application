@@ -912,11 +912,14 @@ function addNewSessionWithCloudSync() {
     }
     
     const dateStr = sessionDate.toLocaleDateString('nl-NL');
-    
+
+    // Maak ISO formaat (YYYY-MM-DD) voor Supabase
+    const dateISOStr = sessionDate.toISOString().split('T')[0];
+
     // STAP 2: Vraag om starttijd
     const startTime = prompt(`Starttijd voor sessie op ${dateStr} (HH:MM):${cloudContext}`);
     if (!startTime) return;
-    
+
     // STAP 3: Vraag om eindtijd
     const endTime = prompt(`Eindtijd voor sessie op ${dateStr} (HH:MM):${cloudContext}`);
     if (!endTime) return;
@@ -981,7 +984,7 @@ function addNewSessionWithCloudSync() {
                 gpx_filename: null,
                 session_start_datetime: toLocalISOString(newStartDate),
                 session_end_datetime: toLocalISOString(newEndDate),
-                session_start_date: dateStr,
+                session_start_date: dateISOStr,
                 session_start_hour: newStartDate.getHours(),
                 session_start_month: newStartDate.getMonth() + 1,
                 locatie: null,
