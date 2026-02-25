@@ -913,8 +913,8 @@ function addNewSessionWithCloudSync() {
     
     const dateStr = sessionDate.toLocaleDateString('nl-NL');
 
-    // Maak ISO formaat (YYYY-MM-DD) voor Supabase
-    const dateISOStr = sessionDate.toISOString().split('T')[0];
+    // Maak ISO formaat (YYYY-MM-DD) voor Supabase zonder UTC verschuiving
+    const dateISOStr = sessionDate.toLocaleDateString('en-CA');
 
     // STAP 2: Vraag om starttijd
     const startTime = prompt(`Starttijd voor sessie op ${dateStr} (HH:MM):${cloudContext}`);
