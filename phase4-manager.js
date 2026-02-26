@@ -460,8 +460,26 @@ function hidePhase4Screen() {
 
 /**
  * Terug naar fase4-overview scherm
+ * KRITIEK: Sla alle sessie-gegevens op voordat terug wordt gegaan
+ * Dit zorgt dat even ongesaved veranderingen (b.v. locatie dropdown) worden opgeslagen
  */
-function backToOverview() {
+async function backToOverview() {
+    console.log('← Going back to overview...');
+
+    // ⭐ KRITIEK: Sla alle sessie-gegevens op VOORDAT we teruggaan
+    // Dit zorgt dat locatie-dropdown en andere velden worden opgeslagen zelfs als onchange niet triggerde
+    if (typeof saveSessionData === 'function') {
+        try {
+            console.log('💾 Saving session data before returning to overview...');
+            await saveSessionData();
+            console.log('✓ Session data saved');
+        } catch (error) {
+            console.error('⚠️ Warning: Could not save session data:', error);
+            // Continue anyway - we're just going back to overview
+        }
+    }
+
+    // Nu teruggaan naar overview
     window.currentSession = null;
 
     // Zet visibility
