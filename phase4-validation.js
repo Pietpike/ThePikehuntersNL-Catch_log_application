@@ -49,7 +49,9 @@ async function validateSession() {
 
             console.log(`🔍 GPS DEBUG - Catch ${catchNum}:`, { id: catch_.id, gps_lat: catch_.gps_lat, gps_lng: catch_.gps_lng, gps_long: catch_.gps_long, full_catch: catch_ });
 
-            if (!catch_.gps_lat || !catch_.gps_long) {
+            // GPS check: veld-sessies gebruiken gps_lng, handmatige sessies gebruiken gps_long
+            const hasGpsLng = isFieldSession ? catch_.gps_lng : catch_.gps_long;
+            if (!catch_.gps_lat || !hasGpsLng) {
                 const hasSessionGps = isFieldSession
                     ? (enrichmentSession.gps_lat && enrichmentSession.gps_lng)
                     : (enrichmentSession.session_start_latitude && enrichmentSession.session_start_longitude);
@@ -320,6 +322,11 @@ async function makeSessionFinal() {
             const catchDate = new Date(vangstTijd);
 
             // Basis catch record
+            // FIX: Voor veld-sessies leest uit gps_lng, voor handmatige uit gps_long
+            const catchGpsLng = isFieldSession ?
+                (catch_.gps_lng || enrichmentSession.gps_lng) :
+                (catch_.gps_long || enrichmentSession.session_start_longitude);
+
             const catchRecord = {
                 session_id: newSessionId,
                 soort: catch_.soort,
@@ -329,7 +336,7 @@ async function makeSessionFinal() {
                 catch_hour: catchDate.getHours(),
                 catch_month: catchDate.getMonth() + 1,
                 gps_lat: catch_.gps_lat || enrichmentSession.gps_lat || enrichmentSession.session_start_latitude,
-                gps_long: catch_.gps_lng || catch_.gps_long || enrichmentSession.gps_lng || enrichmentSession.session_start_longitude,
+                gps_long: catchGpsLng,
                 waypoint_naam: isFieldSession ? catch_.notities : catch_.waypoint_naam,
                 linked_catch_id: null,
                 linked_sighting_id: null
