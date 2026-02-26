@@ -11,6 +11,26 @@ let enrichmentSession = null;
 window.catchEnrichmentData = {};
 
 // ====================================
+// Helper: Load Locations from localStorage
+// ====================================
+
+/**
+ * Laadt locaties uit localStorage (pikehunters_locations)
+ */
+function loadLocationsFromStorage() {
+    try {
+        const locationsJSON = localStorage.getItem('pikehunters_locations');
+        if (locationsJSON) {
+            const locations = JSON.parse(locationsJSON);
+            return Array.isArray(locations) ? locations : [];
+        }
+    } catch (error) {
+        console.warn('Error loading locations from localStorage:', error);
+    }
+    return [];
+}
+
+// ====================================
 // STAP 1: Init Enrichment Screen
 // ====================================
 
@@ -144,11 +164,21 @@ function renderSessionForm(session) {
             type: 'date',
             readonly: true
         },
+        // TWEE LOCATIE VELDEN: één voor veldregistratie (read-only), één definitief (dropdown)
         {
-            key: isFieldSession ? 'locatie' : 'locatie',
-            label: 'Locatie',
+            key: isFieldSession ? 'locatie' : null,
+            label: 'Locatie op water (veldregistratie)',
             type: 'text',
-            editable: true
+            readonly: true,
+            showOnlyIfFieldSession: true
+        },
+        {
+            key: 'locatie_definitief',
+            label: 'Locatie (definitief)',
+            type: 'select',
+            options: loadLocationsFromStorage(),
+            editable: true,
+            required: true
         },
         {
             key: isFieldSession ? 'start_tijd' : 'session_start_datetime',
@@ -193,13 +223,25 @@ function renderSessionForm(session) {
 
     // Render velden
     fields.forEach(field => {
-        const value = session[field.key];
+        // Skip veld indien showOnlyIfFieldSession is true en dit is geen veld session
+        if (field.showOnlyIfFieldSession && !isFieldSession) {
+            return;
+        }
+
+        // Bepaal value - speciale handling voor locatie_definitief
+        let value = field.key ? session[field.key] : null;
+
+        // Voor locatie_definitief, laad de opgeslagen waarde of gebruik default
+        if (field.key === 'locatie_definitief') {
+            value = enrichmentSession.locatie || '';
+        }
+
         const div = document.createElement('div');
         div.style.cssText = 'display: flex; flex-direction: column;';
 
         const label = document.createElement('label');
         label.style.cssText = 'font-weight: 600; margin-bottom: 5px; color: #333; font-size: 0.9em;';
-        label.textContent = field.label;
+        label.textContent = field.label + (field.required ? ' *' : '');
 
         if (field.type === 'select') {
             const select = document.createElement('select');
@@ -212,6 +254,14 @@ function renderSessionForm(session) {
             `;
             select.disabled = field.readonly;
 
+            // Voeg lege optie toe voor verplichte velden
+            if (field.required) {
+                const emptyOpt = document.createElement('option');
+                emptyOpt.value = '';
+                emptyOpt.textContent = '— Selecteer locatie —';
+                select.appendChild(emptyOpt);
+            }
+
             field.options.forEach(opt => {
                 const option = document.createElement('option');
                 option.value = opt;
@@ -222,7 +272,11 @@ function renderSessionForm(session) {
 
             if (field.editable && !field.readonly) {
                 select.onchange = (e) => {
-                    enrichmentSession[field.key] = e.target.value;
+                    if (field.key === 'locatie_definitief') {
+                        enrichmentSession.locatie = e.target.value;
+                    } else {
+                        enrichmentSession[field.key] = e.target.value;
+                    }
                     saveSessionData();
                 };
             }
@@ -274,10 +328,11 @@ async function saveSessionData() {
         const isFieldSession = window.currentSession?.origin === 'veld';
 
         if (isFieldSession) {
+            // Voor veld-sessies: locatie is read-only uit field_sessions, dus NIET updaten
             const { error } = await supabaseManager.client
                 .from('field_sessions')
                 .update({
-                    locatie: enrichmentSession.locatie,
+                    // Locatie is read-only, niet updaten!
                     eind_tijd: enrichmentSession.eind_tijd,
                     watersoort: enrichmentSession.watersoort,
                     stroomsnelheid: enrichmentSession.stroomsnelheid,
