@@ -443,8 +443,26 @@ async function makeSessionFinal() {
 
 /**
  * Wisselt naar validatie-scherm
+ * KRITIEK: Sla alle sessie-gegevens op voordat naar validatie wordt gegaan
+ * Dit zorgt dat even ongesaved veranderingen (b.v. locatie dropdown) worden opgeslagen
  */
-function goToValidation() {
+async function goToValidation() {
+    console.log('→ Switching to validation screen...');
+
+    // ⭐ KRITIEK: Sla alle sessie-gegevens op VOORDAT we naar validatie gaan
+    // Dit zorgt dat locatie-dropdown en andere velden worden opgeslagen zelfs als onchange niet triggerde
+    if (typeof saveSessionData === 'function') {
+        try {
+            console.log('💾 Saving session data before validation...');
+            await saveSessionData();
+            console.log('✓ Session data saved');
+        } catch (error) {
+            console.error('⚠️ Warning: Could not save session data:', error);
+            // Continue anyway - validation will show what's missing
+        }
+    }
+
+    // Nu switchen naar validation screen
     const overview = document.getElementById('phase4OverviewScreen');
     const enrichment = document.getElementById('phase4Enrichment');
     const validation = document.getElementById('phase4Validation');
