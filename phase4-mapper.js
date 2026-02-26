@@ -84,7 +84,7 @@ async function initEnrichmentMap(session) {
         const { data: user } = await supabaseManager.client.auth.getSession();
         if (user.session?.user?.id) {
             await loadPreviousCatches(user.session.user.id);
-            await loadPreviousSightings(user.session.user.id);
+            // Sightings tabel niet beschikbaar in Pikehunters - skipped
         }
 
         // Mark current session catches
@@ -163,75 +163,7 @@ async function loadPreviousCatches(userId) {
 }
 
 // ====================================
-// STAP 3: Load Previous Sightings
-// ====================================
-
-/**
- * Laadt eerdere waarnemingen (vorige 30 dagen) als markers
- */
-async function loadPreviousSightings(userId) {
-    try {
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-        // Try to load sightings, but handle gracefully if table doesn't exist or schema is different
-        const { data: sightings, error } = await supabaseManager.client
-            .from('sightings')
-            .select('*')
-            .eq('user_id', userId)
-            .gte('datetime_sighting', thirtyDaysAgo.toISOString())
-            .limit(50);
-
-        if (error) {
-            console.warn('⚠️ Sightings tabel niet beschikbaar:', error.message);
-            return;
-        }
-
-        if (!sightings || sightings.length === 0) {
-            console.log('No previous sightings found');
-            return;
-        }
-
-        sightings.forEach(sighting => {
-            if (sighting.gps_lat && sighting.gps_long) {
-                try {
-                    const marker = L.marker([sighting.gps_lat, sighting.gps_long], {
-                        icon: L.icon({
-                            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-orange.png',
-                            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-                            iconSize: [20, 33],
-                            iconAnchor: [10, 33],
-                            popupAnchor: [1, -30],
-                            shadowSize: [35, 35]
-                        })
-                    })
-                        .bindPopup(`
-                            <div style="font-size: 0.9em;">
-                                <strong>${sighting.soort || '?'}</strong> (waarneming)<br>
-                                ${sighting.datetime_sighting ? new Date(sighting.datetime_sighting).toLocaleString('nl-NL') : 'Onbekende tijd'}
-                            </div>
-                        `)
-                        .addTo(enrichmentMapInstance);
-
-                    // Apply opacity for sightings
-                    if (marker._icon) marker._icon.style.opacity = '0.7';
-
-                    enrichmentMapMarkers[`sighting_${sighting.id || Math.random()}`] = marker;
-                } catch (e) {
-                    console.warn('Error rendering sighting marker:', e);
-                }
-            }
-        });
-
-        console.log(`✓ Loaded ${sightings.length} previous sightings`);
-
-    } catch (error) {
-        console.error('❌ Error loading previous sightings:', error);
-    }
-}
-
-// ====================================
-// STAP 4: Mark Current Session Catches
+// STAP 3: Mark Current Session Catches
 // ====================================
 
 /**
@@ -293,7 +225,7 @@ function markCurrentSessionCatches(catches) {
 }
 
 // ====================================
-// STAP 5: Map Click Handler
+// STAP 4: Map Click Handler
 // ====================================
 
 /**

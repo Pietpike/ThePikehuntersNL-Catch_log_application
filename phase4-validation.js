@@ -24,14 +24,17 @@ async function validateSession() {
         // ===== SESSIE VALIDATIE =====
         if (!enrichmentSession.locatie || enrichmentSession.locatie.trim() === '') {
             errors.push('Locatie is verplicht');
+            console.log('❌ VALIDATION ERROR:', errors[errors.length-1]);
         }
 
         if (!enrichmentSession.start_tijd && !enrichmentSession.session_start_datetime) {
             errors.push('Starttijd is verplicht');
+            console.log('❌ VALIDATION ERROR:', errors[errors.length-1]);
         }
 
         if (!enrichmentCatches || enrichmentCatches.length === 0) {
             errors.push('Minimaal 1 vangst is verplicht');
+            console.log('❌ VALIDATION ERROR:', errors[errors.length-1]);
         }
 
         // ===== VANGST VALIDATIE =====
@@ -40,6 +43,7 @@ async function validateSession() {
 
             if (!catch_.soort || catch_.soort.trim() === '') {
                 errors.push(`Vangst ${catchNum}: Soort is verplicht`);
+                console.log('❌ VALIDATION ERROR:', errors[errors.length-1]);
             }
 
             // Waarschuwingen (niet blokkerend)
@@ -58,6 +62,7 @@ async function validateSession() {
 
                 if (!hasSessionGps) {
                     errors.push(`Vangst ${catchNum}: Geen GPS coördinaten beschikbaar`);
+                    console.log('❌ VALIDATION ERROR:', errors[errors.length-1]);
                 } else {
                     warnings.push(`Vangst ${catchNum}: Geen vangst-GPS, fallback naar sessie-GPS`);
                 }
