@@ -29,7 +29,6 @@ async function loadUnprocessedSessions() {
             .order('datum', { ascending: false });
 
         if (fieldError) throw fieldError;
-        console.log(`✓ Loaded ${fieldSessions?.length || 0} field sessions`);
 
         // Load handmatig aangemaakte sessies (sessions tabel)
         // WHERE definitief = FALSE AND genegeerd = FALSE
@@ -41,7 +40,6 @@ async function loadUnprocessedSessions() {
             .order('session_start_date', { ascending: false });
 
         if (manualError) throw manualError;
-        console.log(`✓ Loaded ${manualSessions?.length || 0} manual sessions`);
 
         // Combineer en transform
         const allSessions = [];
@@ -111,7 +109,6 @@ async function loadUnprocessedSessions() {
             return b.date.localeCompare(a.date); // YYYY-MM-DD strings zijn lexicographisch sorteerbaar
         });
 
-        console.log(`📊 Total unprocessed sessions: ${allSessions.length}`);
         renderSessionOverview(allSessions);
 
     } catch (error) {
@@ -146,7 +143,6 @@ function renderSessionOverview(sessions) {
     sessions.forEach(session => {
         // session.date is al genormaliseerd naar YYYY-MM-DD formaat
         if (!session.date) {
-            console.warn('⚠️ Session zonder geldige datum:', session);
             return;
         }
 
