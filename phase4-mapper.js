@@ -233,6 +233,16 @@ function markCurrentSessionCatches(catches) {
     try {
         const isFieldCatch = window.currentSession?.origin === 'veld';
 
+        // ⭐ DEBUG: Log alle catches met GPS status
+        console.log('🔴 CURRENT SESSION CATCHES - GPS STATUS:', catches.map(c => ({
+            id: c.id,
+            soort: c.soort,
+            gps_lat: c.gps_lat,
+            gps_lng: c.gps_lng,
+            gps_long: c.gps_long,
+            has_gps: (c.gps_lat && (isFieldCatch ? c.gps_lng : c.gps_long))
+        })));
+
         catches.forEach(catch_ => {
             const lat = catch_.gps_lat;
             const lng = isFieldCatch ? catch_.gps_lng : catch_.gps_long;
@@ -289,38 +299,44 @@ async function onMapClick(latlng) {
 
     try {
         if (isFieldSession) {
+            const insertData = {
+                field_session_id: enrichmentSession.id,
+                soort: species,
+                lengte: length ? parseInt(length) : null,
+                aantal: parseInt(count),
+                vangst_tijd: new Date().toISOString(),
+                gps_lat: latlng.lat,
+                gps_lng: latlng.lng,
+                user_id: window.currentSession.user_id
+            };
+            console.log('📍 Inserting VELD catch with GPS:', insertData);
+
             const { error } = await supabaseManager.client
                 .from('field_catches')
-                .insert({
-                    field_session_id: enrichmentSession.id,
-                    soort: species,
-                    lengte: length ? parseInt(length) : null,
-                    aantal: parseInt(count),
-                    vangst_tijd: new Date().toISOString(),
-                    gps_lat: latlng.lat,
-                    gps_lng: latlng.lng,
-                    user_id: window.currentSession.user_id
-                });
+                .insert(insertData);
 
             if (error) throw error;
         } else {
+            const insertData = {
+                session_id: enrichmentSession.id,
+                soort: species,
+                lengte: length ? parseInt(length) : null,
+                aantal: parseInt(count),
+                catch_datetime: new Date().toISOString(),
+                gps_lat: latlng.lat,
+                gps_long: latlng.lng,
+                user_id: window.currentSession.user_id
+            };
+            console.log('📍 Inserting HANDMATIG catch with GPS:', insertData);
+
             const { error } = await supabaseManager.client
                 .from('catches')
-                .insert({
-                    session_id: enrichmentSession.id,
-                    soort: species,
-                    lengte: length ? parseInt(length) : null,
-                    aantal: parseInt(count),
-                    catch_datetime: new Date().toISOString(),
-                    gps_lat: latlng.lat,
-                    gps_long: latlng.lng,
-                    user_id: window.currentSession.user_id
-                });
+                .insert(insertData);
 
             if (error) throw error;
         }
 
-        console.log('✓ Catch added');
+        console.log('✓ Catch added with GPS', { lat: latlng.lat, lng: latlng.lng });
 
         // Reload enrichment screen
         await initEnrichmentScreen(enrichmentSession.id);

@@ -52,6 +52,15 @@ async function initEnrichmentScreen(sessionId) {
         enrichmentSession = sessionData.session;
         enrichmentCatches = sessionData.catches;
 
+        // ⭐ DEBUG: Log alle catches met GPS status
+        console.log('📋 ENRICHMENT SCREEN LOADED CATCHES:', enrichmentCatches.map(c => ({
+            id: c.id,
+            soort: c.soort,
+            gps_lat: c.gps_lat,
+            gps_lng: c.gps_lng,
+            gps_long: c.gps_long
+        })));
+
         // Render formulier-blok rechtsboven
         renderSessionForm(enrichmentSession);
 
