@@ -174,14 +174,18 @@ async function loadPreviousSightings(userId) {
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
+        // Try to load sightings, but handle gracefully if table doesn't exist or schema is different
         const { data: sightings, error } = await supabaseManager.client
             .from('sightings')
-            .select('id, soort, datetime_sighting, gps_lat, gps_long')
+            .select('*')
             .eq('user_id', userId)
             .gte('datetime_sighting', thirtyDaysAgo.toISOString())
             .limit(50);
 
-        if (error) throw error;
+        if (error) {
+            console.warn('⚠️ Sightings tabel niet beschikbaar:', error.message);
+            return;
+        }
 
         if (!sightings || sightings.length === 0) {
             console.log('No previous sightings found');
@@ -190,28 +194,32 @@ async function loadPreviousSightings(userId) {
 
         sightings.forEach(sighting => {
             if (sighting.gps_lat && sighting.gps_long) {
-                const marker = L.marker([sighting.gps_lat, sighting.gps_long], {
-                    icon: L.icon({
-                        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-orange.png',
-                        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-                        iconSize: [20, 33],
-                        iconAnchor: [10, 33],
-                        popupAnchor: [1, -30],
-                        shadowSize: [35, 35]
+                try {
+                    const marker = L.marker([sighting.gps_lat, sighting.gps_long], {
+                        icon: L.icon({
+                            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-orange.png',
+                            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+                            iconSize: [20, 33],
+                            iconAnchor: [10, 33],
+                            popupAnchor: [1, -30],
+                            shadowSize: [35, 35]
+                        })
                     })
-                })
-                    .bindPopup(`
-                        <div style="font-size: 0.9em;">
-                            <strong>${sighting.soort}</strong> (waarneming)<br>
-                            ${new Date(sighting.datetime_sighting).toLocaleString('nl-NL')}
-                        </div>
-                    `)
-                    .addTo(enrichmentMapInstance);
+                        .bindPopup(`
+                            <div style="font-size: 0.9em;">
+                                <strong>${sighting.soort || '?'}</strong> (waarneming)<br>
+                                ${sighting.datetime_sighting ? new Date(sighting.datetime_sighting).toLocaleString('nl-NL') : 'Onbekende tijd'}
+                            </div>
+                        `)
+                        .addTo(enrichmentMapInstance);
 
-                // Apply opacity for sightings
-                marker._icon.style.opacity = '0.7';
+                    // Apply opacity for sightings
+                    if (marker._icon) marker._icon.style.opacity = '0.7';
 
-                enrichmentMapMarkers[`sighting_${sighting.id}`] = marker;
+                    enrichmentMapMarkers[`sighting_${sighting.id || Math.random()}`] = marker;
+                } catch (e) {
+                    console.warn('Error rendering sighting marker:', e);
+                }
             }
         });
 
@@ -234,14 +242,20 @@ function markCurrentSessionCatches(catches) {
         const isFieldCatch = window.currentSession?.origin === 'veld';
 
         // ⭐ DEBUG: Log alle catches met GPS status
-        console.log('🔴 CURRENT SESSION CATCHES - GPS STATUS:', catches.map(c => ({
-            id: c.id,
-            soort: c.soort,
-            gps_lat: c.gps_lat,
-            gps_lng: c.gps_lng,
-            gps_long: c.gps_long,
-            has_gps: (c.gps_lat && (isFieldCatch ? c.gps_lng : c.gps_long))
-        })));
+        const catchesWithGpsStatus = catches.map(c => {
+            const hasGps = c.gps_lat && (isFieldCatch ? c.gps_lng : c.gps_long);
+            return {
+                id: c.id,
+                soort: c.soort,
+                gps_lat: c.gps_lat,
+                gps_lng: c.gps_lng,
+                gps_long: c.gps_long,
+                has_gps: hasGps,
+                marker_status: hasGps ? '✅ RODE marker' : '❌ GEEN marker'
+            };
+        });
+        console.log('🔴 CURRENT SESSION CATCHES - GPS STATUS:', catchesWithGpsStatus);
+        console.log(`🗺️ ${catchesWithGpsStatus.filter(c => c.has_gps).length}/${catchesWithGpsStatus.length} vangsten hebben GPS`);
 
         catches.forEach(catch_ => {
             const lat = catch_.gps_lat;
