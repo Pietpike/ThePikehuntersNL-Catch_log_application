@@ -47,6 +47,8 @@ async function validateSession() {
                 warnings.push(`Vangst ${catchNum}: Geen lengte opgegeven`);
             }
 
+            console.log(`🔍 GPS DEBUG - Catch ${catchNum}:`, { id: catch_.id, gps_lat: catch_.gps_lat, gps_lng: catch_.gps_lng, gps_long: catch_.gps_long, full_catch: catch_ });
+
             if (!catch_.gps_lat || !catch_.gps_long) {
                 const hasSessionGps = isFieldSession
                     ? (enrichmentSession.gps_lat && enrichmentSession.gps_lng)
