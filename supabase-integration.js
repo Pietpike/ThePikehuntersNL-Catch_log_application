@@ -543,7 +543,7 @@ async function checkLocationTimeProximity(session) {
         };
         
         const { data, error } = await supabaseManager.client
-            .from(SUPABASE_CONFIG.tables.sessions)
+            .from(DB_SCHEMA.sessions.table)
             .select('*')
             .eq('locatie', session.locatie)
             .gte('session_start_datetime', timeRange.start.toISOString())
@@ -573,7 +573,7 @@ async function checkSessionDuplicates(session, sessionIndex) {
     try {
         if (SUPABASE_CONFIG.duplicateDetection.checkSessionName) {
             const { data, error } = await supabaseManager.client
-                .from(SUPABASE_CONFIG.tables.sessions)
+                .from(DB_SCHEMA.sessions.table)
                 .select('*')
                 .eq('sessie_naam', sessionName)
                 .eq('team_member', supabaseManager.teamMember);
@@ -590,7 +590,7 @@ async function checkSessionDuplicates(session, sessionIndex) {
             const sessionDate = session.startTime.toISOString().split('T')[0];
             
             const { data, error } = await supabaseManager.client
-                .from(SUPABASE_CONFIG.tables.sessions)
+                .from(DB_SCHEMA.sessions.table)
                 .select('*')
                 .eq('gpx_filename', session.fileName)
                 .eq('session_start_date', sessionDate);
@@ -730,7 +730,7 @@ async function showEnhancedDuplicateDialog(session, duplicates, sessionIndex) {
 async function deleteSessionAndCatches(sessionId) {
     return await executeWithRetry(async () => {
         const { error: catchesError } = await supabaseManager.client
-            .from(SUPABASE_CONFIG.tables.catches)
+            .from(DB_SCHEMA.catches.table)
             .delete()
             .eq('session_id', sessionId);
         
@@ -739,7 +739,7 @@ async function deleteSessionAndCatches(sessionId) {
         }
         
         const { error: sessionError } = await supabaseManager.client
-            .from(SUPABASE_CONFIG.tables.sessions)
+            .from(DB_SCHEMA.sessions.table)
             .delete()
             .eq('session_id', sessionId);
         
@@ -904,95 +904,6 @@ async function updateAasInDatabase(aasId, aasData) {
 // ================================
 // AAS SYNC
 // ================================
-
-async function syncAasjesOnly() {
-    try {
-        console.log('=== SEPARATE AAS SYNC START ===');
-        
-        if (!supabaseManager.isInitialized || !supabaseManager.teamMember) {
-            showStatus('Database sync niet geïnitialiseerd', 'warning');
-            return false;
-        }
-        
-        if (typeof LureManager === 'undefined' || !LureManager.lures || LureManager.lures.length === 0) {
-            showStatus('Geen lokale aasjes gevonden', 'warning');
-            return false;
-        }
-        
-        const localAasjes = LureManager.lures;
-        
-        const nameCount = {};
-        localAasjes.forEach(aas => {
-            const naam = (aas.name || aas.naam || '').toLowerCase();
-            nameCount[naam] = (nameCount[naam] || 0) + 1;
-        });
-        
-        const duplicates = Object.entries(nameCount).filter(([name, count]) => count > 1);
-        if (duplicates.length > 0) {
-            console.warn('Duplicaten in lokale lijst:');
-            duplicates.forEach(([name, count]) => {
-                console.warn(`  - "${name}": ${count}x`);
-            });
-        }
-        
-        console.log(`Gevonden ${localAasjes.length} lokale aasjes (${Object.keys(nameCount).length} unieke)`);
-        
-        const confirmMessage = `Upload ${Object.keys(nameCount).length} unieke aasjes?\n\n` +
-                             `Team: ${supabaseManager.teamMember}\n` +
-                             `Met SIMILARITY CHECK\n` +
-                             `Threshold: ${(SUPABASE_CONFIG.similarity.threshold * 100).toFixed(0)}%\n\n` +
-                             `Doorgaan?`;
-        
-        if (!confirm(confirmMessage)) {
-            showStatus('Aas sync geannuleerd', 'info');
-            return false;
-        }
-        
-        showStatus('Aas sync gestart...', 'info');
-        
-        const result = await processAllAasjesWithSimilarity(localAasjes);
-        
-        if (result.success) {
-            let message = `Aas sync voltooid!`;
-            
-            if (result.updatedAasjes > 0) {
-                message += `\n\nUpdated ${result.updatedAasjes} aasjes:\n`;
-                result.updatedNames.forEach(name => {
-                    message += `  - ${name}\n`;
-                });
-            }
-            
-            if (result.newAasjes > 0) {
-                message += `\n\nNieuw ${result.newAasjes} aasjes:\n`;
-                result.newNames.forEach(name => {
-                    message += `  - ${name}\n`;
-                });
-            }
-            
-            if (result.reusedAasjes > 0) {
-                message += `\n\n${result.reusedAasjes} ongewijzigd`;
-            }
-            
-            if (result.skippedAasjes > 0) {
-                message += `\n\n${result.skippedAasjes} overgeslagen`;
-            }
-            
-            alert(message);
-            
-            const shortMessage = `${result.updatedAasjes} ge-update - ${result.newAasjes} toegevoegd - ${result.reusedAasjes} ongewijzigd`;
-            showStatus(shortMessage, 'success');
-            
-            return true;
-        } else {
-            throw new Error(result.error);
-        }
-        
-    } catch (error) {
-        console.error('Aas sync error:', error);
-        showStatus(`Aas sync fout: ${error.message}`, 'error');
-        return false;
-    }
-}
 
 async function processAllAasjesWithSimilarity(aasjes) {
     const result = {
@@ -1222,7 +1133,7 @@ async function insertSessionToDatabase(sessionData) {
         });
         
         const { data, error } = await supabaseManager.client
-            .from(SUPABASE_CONFIG.tables.sessions)
+            .from(DB_SCHEMA.sessions.table)
             .insert(cleanData)
             .select();
         
@@ -1237,6 +1148,59 @@ async function insertSessionToDatabase(sessionData) {
         console.log(`Session inserted (ID: ${data[0].session_id})`);
         return data[0];
     }, 3, 1000);
+}
+
+// ================================
+// WAYPOINT NAME PARSER - Verplaatst van map-processing.js
+// ================================
+
+/**
+ * Parse waypoint name to extract species, length, and quantity
+ * Supports formats: "2x Baars 25", "Baars 25", "Baars25", "Baars"
+ */
+function parseWaypointName(name) {
+    const result = {
+        soort: '',
+        lengte: '',
+        aantal: 1,
+        valid: false
+    };
+
+    const cleanName = name.trim().toLowerCase();
+
+    // Enhanced parsing met validation
+    let match = cleanName.match(/(\d+)[x\s]+([a-z]+)\s+(\d+)/);
+    if (match) {
+        result.aantal = parseInt(match[1]);
+        result.soort = match[2].charAt(0).toUpperCase() + match[2].slice(1);
+        result.lengte = match[3];
+        result.valid = CONFIG.commonSpecies.includes(match[2]);
+        return result;
+    }
+
+    match = cleanName.match(/([a-z]+)\s+(\d+)/);
+    if (match) {
+        result.soort = match[1].charAt(0).toUpperCase() + match[1].slice(1);
+        result.lengte = match[2];
+        result.valid = CONFIG.commonSpecies.includes(match[1]);
+        return result;
+    }
+
+    match = cleanName.match(/([a-z]+)(\d+)/);
+    if (match) {
+        result.soort = match[1].charAt(0).toUpperCase() + match[1].slice(1);
+        result.lengte = match[2];
+        result.valid = CONFIG.commonSpecies.includes(match[1]);
+        return result;
+    }
+
+    match = cleanName.match(/^([a-z]+)$/);
+    if (match) {
+        result.soort = match[1].charAt(0).toUpperCase() + match[1].slice(1);
+        result.valid = CONFIG.commonSpecies.includes(match[1]);
+    }
+
+    return result;
 }
 
 async function insertSessionCatches(session, sessionId, aasIdMapping) {
@@ -1262,7 +1226,7 @@ async function insertSessionCatches(session, sessionId, aasIdMapping) {
                 catch_month: wp.datetime.getMonth() + 1,
                 gps_lat: wp.lat,
                 gps_long: wp.lon,
-                waypoint_naam: wp.name || null,
+                notities: wp.name || null,
                 soort: parsed.soort || '',
                 aantal: parsed.aantal || 1,
                 lengte: parsed.lengte ? parseFloat(parsed.lengte) : null,
@@ -1275,13 +1239,13 @@ async function insertSessionCatches(session, sessionId, aasIdMapping) {
                 aasvis_op_stek: catchData.aasvis || null,
                 vangsthoogte: catchData.vangsthoogte || null,
                 zon_schaduw: catchData.zonschaduw || null,
-                bodem_hardheid: catchData.bodemhardheid || null
+                bodemhardheid: catchData.bodemhardheid || null
             });
         });
         
         if (catchesToInsert.length > 0) {
             const { data, error } = await supabaseManager.client
-                .from(SUPABASE_CONFIG.tables.catches)
+                .from(DB_SCHEMA.catches.table)
                 .insert(catchesToInsert);
             
             if (error) {
@@ -1345,6 +1309,7 @@ async function processSingleSessionToDatabase(session, sessionIndex) {
             stroomsnelheid: session.stroomsnelheid || null,
             helderheid: session.helderheid || null,
             watertemperatuur_measured: session.watertemperatuur ? parseFloat(session.watertemperatuur) : null,
+            weather_id: null,
             definitief: false
         };
         
@@ -1407,99 +1372,6 @@ async function processAllSessionsToDatabase(sessions, startIndex = 0) {
     } catch (error) {
         console.error('Fatal error in processAllSessionsToDatabase:', error);
         throw error;
-    }
-}
-
-async function syncSessionsToDatabase() {
-    try {
-        console.log('=== DATABASE SYNC START ===');
-        
-        if (!supabaseManager.isInitialized) {
-            const initialized = await initCloudSync();
-            if (!initialized) {
-                throw new Error('Database init failed');
-            }
-        }
-
-        if (!supabaseManager.teamMember) {
-            const userSet = changeCloudUser();
-            if (!userSet) {
-                showStatus('Sync cancelled - no team member', 'warning');
-                return false;
-            }
-        }
-
-        if (typeof generateValidationReport === 'function') {
-            const report = generateValidationReport();
-            
-            if (report.summary.hasTimeValidationErrors) {
-                const errorMessage = `Sync blocked: ${report.overall.timeValidationErrors} time errors`;
-                showStatus(errorMessage, 'error');
-                if (typeof showValidationModal === 'function') {
-                    showValidationModal();
-                }
-                setTimeout(() => {
-                    alert(`SYNC BLOCKED\n\n${errorMessage}\n\nCatches must be within session times.`);
-                }, 500);
-                return false;
-            }
-            
-            if (!report.summary.canExport) {
-                showStatus('Sync blocked - validation errors', 'warning');
-                if (typeof showValidationModal === 'function') {
-                    showValidationModal();
-                }
-                return false;
-            }
-        }
-
-        if (!sessions || sessions.length === 0) {
-            showStatus('No sessions to sync', 'warning');
-            return false;
-        }
-
-        const totalWaypoints = sessions.reduce((total, session) => total + session.waypoints.length, 0);
-        const confirmMessage = `Start database sync?\n\n` +
-                             `Team: ${supabaseManager.teamMember}\n` +
-                             `Sessions: ${sessions.length}\n` +
-                             `Catches: ${totalWaypoints}\n` +
-                             `Duplicate Detection: ${SUPABASE_CONFIG.duplicateDetection.enabled ? 'ENABLED' : 'DISABLED'}\n\n` +
-                             `This cannot be undone.`;
-        
-        if (!confirm(confirmMessage)) {
-            showStatus('Sync cancelled', 'info');
-            return false;
-        }
-
-        showStatus('Database sync started...', 'info');
-        supabaseManager.syncInProgress = true;
-        updateCloudSyncStatus();
-        
-        const result = await processAllSessionsToDatabase(sessions);
-        
-        if (result.success) {
-            let message = `Database sync voltooid!\n` +
-                          `${result.sessionsAdded} sessies toegevoegd\n` +
-                          `${result.catchesAdded} vangsten toegevoegd\n` +
-                          `${result.aasAdded} nieuwe aasjes toegevoegd`;
-            
-            if (result.sessionsSkipped > 0) {
-                message += `\n${result.sessionsSkipped} sessies overgeslagen (duplicates)`;
-            }
-            
-            showStatus(message.replace(/\n/g, ' - '), 'success');
-            return true;
-        } else {
-            throw new Error(`Sync failed: ${result.error}`);
-        }
-        
-    } catch (error) {
-        console.error('Database sync error:', error);
-        showStatus(`Database sync error: ${error.message}`, 'error');
-        return false;
-    } finally {
-        supabaseManager.syncInProgress = false;
-        updateCloudSyncStatus();
     }
 }
 
@@ -1690,10 +1562,10 @@ class SupabaseManager {
                         aasvis_op_stek: catchData.aasvis || null,
                         vangsthoogte: catchData.vangsthoogte || null,
                         zon_schaduw: catchData.zonschaduw || null,
-                        bodem_hardheid: catchData.bodemhardheid || null,
+                        bodemhardheid: catchData.bodemhardheid || null,
                         gpx_filename: session.fileName || null,
                         sessie_naam: exportSessionName,
-                        waypoint_naam: waypoint.name || null,
+                        notities: waypoint.name || null,
                         processed: false
                     };
                     records.push(record);
@@ -1725,10 +1597,10 @@ class SupabaseManager {
                     aasvis_op_stek: null,
                     vangsthoogte: null,
                     zon_schaduw: null,
-                    bodem_hardheid: null,
+                    bodemhardheid: null,
                     gpx_filename: session.fileName || null,
                     sessie_naam: exportSessionName,
-                    waypoint_naam: 'Geen vangsten',
+                    notities: 'Geen vangsten',
                     processed: false
                 };
                 records.push(record);
@@ -1888,46 +1760,16 @@ class SupabaseManager {
             return;
         }
 
-        let canSync = true;
-        let validationMessage = '';
-        let isTimeValidationBlocked = false;
-        
-        if (typeof generateValidationReport === 'function') {
-            try {
-                const report = generateValidationReport();
-                canSync = report.summary.canExport;
-                if (report.summary.hasTimeValidationErrors) {
-                    validationMessage = ` (BLOCKED: ${report.overall.timeValidationErrors} time errors)`;
-                    isTimeValidationBlocked = true;
-                    canSync = false;
-                } else if (!canSync) {
-                    validationMessage = ' (BLOCKED: validation errors)';
-                }
-            } catch (error) {
-                console.warn('Could not check validation:', error);
-            }
-        }
-
         const sessionCount = (typeof sessions !== 'undefined' && sessions) ? sessions.length : 0;
-        
+
         if (sessionCount === 0) {
             cloudBtn.innerHTML = `Cloud Sync (${this.teamMember})`;
             cloudBtn.disabled = true;
-        } else if (canSync) {
+        } else {
             cloudBtn.innerHTML = `Cloud Sync (${this.teamMember})`;
             cloudBtn.disabled = false;
             cloudBtn.style.color = '';
             cloudBtn.style.fontWeight = '';
-        } else {
-            cloudBtn.innerHTML = `Cloud Sync${validationMessage}`;
-            cloudBtn.disabled = true;
-            if (isTimeValidationBlocked) {
-                cloudBtn.style.color = '#f44336';
-                cloudBtn.style.fontWeight = 'bold';
-            } else {
-                cloudBtn.style.color = '#ff9800';
-                cloudBtn.style.fontWeight = '';
-            }
         }
     }
 
@@ -1984,85 +1826,6 @@ async function initCloudSync() {
         console.error('Init failed:', error);
         if (typeof showStatus === 'function') {
             showStatus(`Init failed: ${error.message}`, 'error');
-        }
-        return false;
-    }
-}
-
-async function syncToCloud() {
-    try {
-        if (!supabaseManager.isInitialized) {
-            const initialized = await initCloudSync();
-            if (!initialized) {
-                throw new Error('Init failed');
-            }
-        }
-
-        if (!supabaseManager.teamMember) {
-            const userSet = changeCloudUser();
-            if (!userSet) {
-                if (typeof showStatus === 'function') {
-                    showStatus('Sync cancelled', 'warning');
-                }
-                return false;
-            }
-        }
-
-        if (typeof generateValidationReport === 'function') {
-            const report = generateValidationReport();
-            if (report.summary.hasTimeValidationErrors) {
-                const errorMessage = `Sync blocked: ${report.overall.timeValidationErrors} time errors`;
-                if (typeof showStatus === 'function') {
-                    showStatus(errorMessage, 'error');
-                }
-                if (typeof showValidationModal === 'function') {
-                    showValidationModal();
-                }
-                setTimeout(() => {
-                    alert(`SYNC BLOCKED\n\n${errorMessage}`);
-                }, 500);
-                return false;
-            }
-            if (!report.summary.canExport) {
-                const errorMessage = 'Sync blocked - validation errors';
-                if (typeof showStatus === 'function') {
-                    showStatus(errorMessage, 'warning');
-                }
-                if (typeof showValidationModal === 'function') {
-                    showValidationModal();
-                }
-                return false;
-            }
-        }
-
-        if (!sessions || sessions.length === 0) {
-            if (typeof showStatus === 'function') {
-                showStatus('No sessions to sync', 'warning');
-            }
-            return false;
-        }
-
-        const totalWaypoints = sessions.reduce((total, session) => total + session.waypoints.length, 0);
-        const confirmMessage = `Start cloud sync?\n\nTeam: ${supabaseManager.teamMember}\nSessions: ${sessions.length}\nCatches: ${totalWaypoints}\n\nCannot be undone.`;
-        
-        if (!confirm(confirmMessage)) {
-            if (typeof showStatus === 'function') {
-                showStatus('Sync cancelled', 'info');
-            }
-            return false;
-        }
-
-        if (typeof showStatus === 'function') {
-            showStatus('Cloud sync started...', 'info');
-        }
-        
-        const result = await supabaseManager.syncToCloud(sessions);
-        return result;
-        
-    } catch (error) {
-        console.error('Sync failed:', error);
-        if (typeof showStatus === 'function') {
-            showStatus(`Sync error: ${error.message}`, 'error');
         }
         return false;
     }
@@ -2126,31 +1889,8 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('Supabase integration v10.1 loading...');
     const controls = document.querySelector('.controls');
 
-    // Setup UI buttons only if on a page with controls (index.html)
-    if (controls) {
-        // Create Sync Aasjes button with correct ID (first)
-        if (!document.getElementById('cloudSyncAasjesBtn')) {
-            const aasSyncBtn = document.createElement('button');
-            aasSyncBtn.id = 'cloudSyncAasjesBtn';
-            aasSyncBtn.className = 'btn btn-success';
-            aasSyncBtn.innerHTML = 'Sync Aasjes';
-            aasSyncBtn.onclick = syncAasjesOnly;
-            controls.appendChild(aasSyncBtn);
-        }
-
-        // Create Cloud Sync button (second)
-        if (!document.getElementById('cloudSyncBtn')) {
-            const cloudBtn = document.createElement('button');
-            cloudBtn.id = 'cloudSyncBtn';
-            cloudBtn.className = 'btn btn-info';
-            cloudBtn.innerHTML = 'Cloud Sync (Initializing...)';
-            cloudBtn.onclick = syncToCloud;
-            cloudBtn.disabled = true;
-            controls.appendChild(cloudBtn);
-        }
-    } else {
-        console.log('Controls element not found - running on non-app page (login.html)');
-    }
+    // Dynamic button creation removed - all buttons now defined in HTML
+    // (Sync buttons and Aas management buttons removed as part of GPX removal)
 
     // Initialize cloud sync (always, regardless of page type)
     initCloudSync().then(success => {
@@ -2165,19 +1905,16 @@ document.addEventListener('DOMContentLoaded', function() {
 // ================================
 window.supabaseManager = supabaseManager;
 window.initCloudSync = initCloudSync;
-window.syncToCloud = syncToCloud;
 window.testCloudConnection = testCloudConnection;
 window.changeCloudUser = changeCloudUser;
 window.getCloudSyncStatus = getCloudSyncStatus;
 window.generateExportSessionName = generateExportSessionName;
 window.toLocalISOString = toLocalISOString;
-window.syncSessionsToDatabase = syncSessionsToDatabase;
 window.processAllSessionsToDatabase = processAllSessionsToDatabase;
 window.processSingleSessionToDatabase = processSingleSessionToDatabase;
 window.insertSessionToDatabase = insertSessionToDatabase;
 window.processSessionAasjes = processSessionAasjes;
 window.insertSessionCatches = insertSessionCatches;
-window.syncAasjesOnly = syncAasjesOnly;
 window.processAllAasjesWithSimilarity = processAllAasjesWithSimilarity;
 window.compareAasForUpdate = compareAasForUpdate;
 window.updateAasInDatabase = updateAasInDatabase;
@@ -2194,6 +1931,7 @@ window.checkLocationTimeProximity = checkLocationTimeProximity;
 window.showEnhancedDuplicateDialog = showEnhancedDuplicateDialog;
 window.deleteSessionAndCatches = deleteSessionAndCatches;
 window.getDuplicateTypeDescription = getDuplicateTypeDescription;
+window.parseWaypointName = parseWaypointName;
 
 console.log('='.repeat(80));
 console.log('ThePikehunters Supabase Integration v10.1 COMPLETE loaded!');

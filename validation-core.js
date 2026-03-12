@@ -546,9 +546,12 @@ function checkSessionCompleteness(session) {
 // ================================
 
 function generateValidationReport() {
+    // Guard clause to handle undefined sessions
+    const safeSessions = (typeof sessions !== 'undefined' && sessions) ? sessions : [];
+
     const report = {
         overall: {
-            totalSessions: sessions.length,
+            totalSessions: safeSessions.length,
             totalCatches: 0,
             completeSessions: 0,
             completeCatches: 0,
@@ -577,7 +580,7 @@ function generateValidationReport() {
     let totalValidationErrors = 0;
     let timeValidationErrors = 0;
     
-    sessions.forEach((session, sessionIndex) => {
+    safeSessions.forEach((session, sessionIndex) => {
         const sessionValidation = checkSessionCompleteness(session);
         
         if (sessionValidation.complete) {
@@ -663,8 +666,8 @@ function generateValidationReport() {
     report.overall.validationErrors = totalValidationErrors;
     report.overall.timeValidationErrors = timeValidationErrors;
     
-    if (sessions.length > 0) {
-        report.summary.sessionCompletionRate = (report.overall.completeSessions / sessions.length) * 100;
+    if (safeSessions.length > 0) {
+        report.summary.sessionCompletionRate = (report.overall.completeSessions / safeSessions.length) * 100;
     }
     
     if (totalCatches > 0) {
@@ -675,11 +678,11 @@ function generateValidationReport() {
     report.summary.hasTimeValidationErrors = timeValidationErrors > 0;
     
     report.summary.overallComplete = (
-        report.overall.incompleteSessions === 0 && 
+        report.overall.incompleteSessions === 0 &&
         report.overall.incompleteCatches === 0 &&
         !report.summary.hasValidationErrors &&
         !report.summary.hasTimeValidationErrors &&
-        sessions.length > 0 &&
+        safeSessions.length > 0 &&
         totalCatches > 0
     );
     
@@ -849,10 +852,8 @@ function exportToExcelWithValidation() {
             if (typeof showStatus === 'function') {
                 showStatus(`Export geblokkeerd: ${report.overall.timeValidationErrors} vangst(en) vallen buiten sessie tijden`, 'error');
             }
+            return false;
         }
-        
-        showValidationModal();
-        return false;
     }
     
     if (typeof window.originalExportToExcel === 'function') {
@@ -879,104 +880,6 @@ function interceptExportFunctions() {
 // VALIDATION MODAL - ESSENTIAL FUNCTIONS ONLY
 // ================================
 
-function showValidationModal() {
-    const report = runOptimizedValidation();
-    
-    const existingModal = document.getElementById('validationModal');
-    if (existingModal) existingModal.remove();
-    
-    const hasTimeErrors = report.summary.hasTimeValidationErrors;
-    const modalColor = hasTimeErrors ? '#f44336' : (report.summary.overallComplete ? '#4CAF50' : '#FF9800');
-    
-    const modalHTML = `
-        <div id="validationModal" style="
-            display: block; position: fixed; z-index: 2000; left: 0; top: 0; 
-            width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5);
-        ">
-            <div style="
-                background-color: white; margin: 2% auto; padding: 0; border-radius: 8px;
-                width: 90%; max-width: 1000px; max-height: 90vh; overflow: hidden;
-            ">
-                <div style="background: ${modalColor}; color: white; padding: 15px 20px; display: flex; justify-content: space-between;">
-                    <h3 style="margin: 0;">Validatie Rapport ${report.summary.overallComplete ? '✅' : hasTimeErrors ? '⏰🚫' : '⚠️'}</h3>
-                    <span style="cursor: pointer; font-size: 28px;" onclick="closeValidationModal()">&times;</span>
-                </div>
-                <div style="padding: 20px; max-height: calc(90vh - 160px); overflow-y: auto;">
-                    ${generateValidationContent(report)}
-                </div>
-                <div style="padding: 15px 20px; border-top: 1px solid #eee; background: #f9f9f9; display: flex; justify-content: space-between;">
-                    <div style="font-size: 0.9em; color: #666;">ThePikehunters Validation System</div>
-                    <button onclick="closeValidationModal()" style="padding: 8px 15px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer;">Sluiten</button>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    document.body.insertAdjacentHTML('beforeend', modalHTML);
-}
-
-function generateValidationContent(report) {
-    const sessionProgress = report.summary.sessionCompletionRate;
-    const catchProgress = report.summary.catchCompletionRate;
-    
-    let content = `
-        <div style="margin-bottom: 25px;">
-            <h4>Validatie Overzicht</h4>
-            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-bottom: 20px;">
-                <div style="background: #f0f8ff; padding: 15px; border-radius: 6px;">
-                    <div style="font-size: 1.5em; font-weight: bold; color: #2196F3;">${report.overall.totalSessions}</div>
-                    <div>Totaal Sessies</div>
-                    <div style="font-size: 0.8em;">✓ ${report.overall.completeSessions} compleet • ⚠ ${report.overall.incompleteSessions} incompleet</div>
-                </div>
-                <div style="background: #f0fff4; padding: 15px; border-radius: 6px;">
-                    <div style="font-size: 1.5em; font-weight: bold; color: #4CAF50;">${report.overall.totalCatches}</div>
-                    <div>Totaal Vangsten</div>
-                    <div style="font-size: 0.8em;">✓ ${report.overall.completeCatches} compleet • ⚠ ${report.overall.incompleteCatches} incompleet</div>
-                    ${report.overall.timeValidationErrors > 0 ? `<div style="font-size: 0.8em; color: #f44336;">⏰ ${report.overall.timeValidationErrors} TIJD FOUTEN</div>` : ''}
-                </div>
-            </div>
-        </div>
-    `;
-    
-    if (report.summary.hasTimeValidationErrors) {
-        content += `
-            <div style="background: #ffebee; color: #c62828; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 2px solid #f44336;">
-                <h4>🚫 KRITIEKE FOUT: Vangsten buiten sessie tijden</h4>
-                <div style="margin-bottom: 10px;">
-                    <strong>${report.overall.timeValidationErrors} vangst(en) hebben tijdstempels die buiten hun sessie tijden vallen</strong>
-                </div>
-                <div>Dit blokkeert alle export functionaliteit. Pas sessie tijden aan of verwijder problematische vangsten.</div>
-            </div>
-        `;
-    }
-    
-    return content;
-}
-
-function closeValidationModal() {
-    const modal = document.getElementById('validationModal');
-    if (modal) modal.remove();
-}
-
-// ================================
-// INITIALIZATION
-// ================================
-
-function initializeValidation() {
-    interceptExportFunctions();
-    
-    document.addEventListener('change', (e) => {
-        if (e.target.matches('input[type="time"], input[type="number"], select')) {
-            queueValidation('field-change');
-        }
-    });
-}
-
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initializeValidation);
-} else {
-    initializeValidation();
-}
 
 // ================================
 // GLOBAL EXPORTS
@@ -998,8 +901,6 @@ window.checkCatchCompleteness = checkCatchCompleteness;
 window.checkSessionCompleteness = checkSessionCompleteness;
 window.generateValidationReport = generateValidationReport;
 window.runOptimizedValidation = runOptimizedValidation;
-window.showValidationModal = showValidationModal;
-window.closeValidationModal = closeValidationModal;
 window.applyValidationFeedback = applyValidationFeedback;
 window.updateValidationInRealTime = updateValidationInRealTime;
 window.exportToExcelWithValidation = exportToExcelWithValidation;

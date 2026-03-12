@@ -332,19 +332,7 @@ const DataManager = {
                     ${this.generateCloudSyncHeaderHTML(cloudInfo)}
                     
                     <div style="padding: 20px; max-height: calc(85vh - 160px); overflow-y: auto;">
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
-                            <!-- Left Column: Locations + Session Dropdowns -->
-                            <div>
-                                ${this.generateLocationSection()}
-                                ${this.generateSessionDropdownsSection()}
-                            </div>
-                            
-                            <!-- Right Column: Catch Dropdowns + Aas Dropdowns -->
-                            <div>
-                                ${this.generateCatchDropdownsSection()}
-                                ${this.generateAasDropdownsSection()}
-                            </div>
-                        </div>
+                        ${this.generateLocationSection()}
                     </div>
                     
                     <div style="
@@ -356,7 +344,7 @@ const DataManager = {
                         align-items: center;
                     ">
                         <div style="font-size: 0.9em; color: #666;">
-                            Version 6.2-extracted + Fase 1.1.2 & 1.1.3 & 1.4 & 1.5 - Universal Data Manager + Cloud Sync + Debug System Extraction + Aas Management + Backup/Restore
+                            Version 6.3-location-only - Locatie Beheer + Cloud Sync
                         </div>
                         <button onclick="DataManager.closeManager()" style="
                             padding: 8px 15px;
@@ -435,100 +423,9 @@ const DataManager = {
         `;
     },
     
-    generateSessionDropdownsSection: function() {
-        const sessionCategories = ['watersoort', 'stroomsnelheid', 'helderheid'];
-        const categoryNames = {
-            watersoort: '💧 Watersoort',
-            stroomsnelheid: '🌊 Stroomsnelheid', 
-            helderheid: '👁️ Helderheid'
-        };
-        
-        return `
-            <div style="background: #f0f8ff; padding: 15px; border-radius: 6px;">
-                <h4 style="margin: 0 0 15px 0; color: #1a1a1a;">🏞️ Sessie Eigenschappen</h4>
-                ${sessionCategories.map(category => this.generateDropdownCategoryHTML(category, categoryNames[category])).join('')}
-            </div>
-        `;
-    },
-    
-    generateCatchDropdownsSection: function() {
-        const catchCategories = ['techniek', 'vissnelheid', 'structuur', 'aasvis', 'vangsthoogte', 'booster', 'zonschaduw', 'bodemhardheid'];
-        const categoryNames = {
-            techniek: '🎣 Techniek',
-            vissnelheid: '⚡ Vissnelheid',
-            structuur: '🗿 Structuur',
-            aasvis: '🟠 Aasvis op Stek', 
-            vangsthoogte: '📍 Vangsthoogte',
-            booster: '🚀 Booster',
-            zonschaduw: '☀️ Zon/Schaduw',
-            bodemhardheid: '🪨 Bodemhardheid'
-        };
-        
-        return `
-            <div style="background: #f0fff4; padding: 15px; border-radius: 6px; margin-bottom: 20px;">
-                <h4 style="margin: 0 0 15px 0; color: #1a1a1a;">🎯 Vangst Eigenschappen</h4>
-                ${catchCategories.map(category => this.generateDropdownCategoryHTML(category, categoryNames[category])).join('')}
-            </div>
-        `;
-    },
-    
-    // FASE 1.4.1: Aas dropdown categories section voor Data Beheer integratie
-    generateAasDropdownsSection: function() {
-        const aasCategories = ['aastype', 'aasactie', 'aasdrijfvermogen', 'aasvorm', 'aasprimairekleur', 'aassecundairekleur', 'aasratel', 'aastail'];
-        const categoryNames = {
-            aastype: '🎣 Aas Type',
-            aasactie: '⚡ Aas Actie', 
-            aasdrijfvermogen: '🌊 Drijfvermogen',
-            aasvorm: '📏 Vorm',
-            aasprimairekleur: '🎨 Primaire Kleur',
-            aassecundairekleur: '🎨 Secundaire Kleur',
-            aasratel: '🔔 Ratel',
-            aastail: '🐟 Tail'
-        };
-        
-        return `
-            <div style="background: #fff8e1; padding: 15px; border-radius: 6px;">
-                <h4 style="margin: 0 0 15px 0; color: #1a1a1a;">🎣 Aas Eigenschappen</h4>
-                ${aasCategories.map(category => this.generateDropdownCategoryHTML(category, categoryNames[category])).join('')}
-            </div>
-        `;
-    },
-    
-    generateDropdownCategoryHTML: function(category, displayName) {
-        return `
-            <div style="margin-bottom: 15px; border: 1px solid #e0e0e0; border-radius: 4px; padding: 10px;">
-                <h5 style="margin: 0 0 8px 0; display: flex; justify-content: space-between; align-items: center;">
-                    ${displayName}
-                    <span style="background: #2196F3; color: white; padding: 1px 6px; border-radius: 8px; font-size: 0.7em;" id="${category}Count">0</span>
-                </h5>
-                
-                <div id="${category}List" style="max-height: 80px; overflow-y: auto; margin-bottom: 8px; font-size: 0.85em;"></div>
-                
-                <div style="display: flex; gap: 6px;">
-                    <input type="text" id="new${category}Input" placeholder="Nieuwe optie..." style="
-                        flex: 1;
-                        padding: 4px 6px;
-                        border: 1px solid #ddd;
-                        border-radius: 3px;
-                        font-size: 0.85em;
-                    " onkeypress="if(event.key==='Enter') DataManager.addDropdownOption('${category}')">
-                    <button onclick="DataManager.addDropdownOption('${category}')" style="
-                        padding: 4px 8px;
-                        background: #2196F3;
-                        color: white;
-                        border: none;
-                        border-radius: 3px;
-                        cursor: pointer;
-                        font-size: 0.8em;
-                    ">+</button>
-                </div>
-            </div>
-        `;
-    },
     
     updateAllSections: function() {
         this.updateLocationSection();
-        this.updateDropdownSections();
     },
     
     updateLocationSection: function() {
@@ -580,58 +477,6 @@ const DataManager = {
                 " title="Verwijder">×</button>
             </div>
         `).join('');
-    },
-    
-    // FASE 1.4.2: UpdateDropdownSections uitgebreid met aas categories
-    updateDropdownSections: function() {
-        const categories = [
-            // Bestaande categories
-            'watersoort', 'stroomsnelheid', 'helderheid', 'techniek', 'vissnelheid', 'structuur', 'aasvis', 'vangsthoogte', 'booster', 'zonschaduw', 'bodemhardheid',
-            // Nieuwe aas categories - FASE 1.4.2
-            'aastype', 'aasactie', 'aasdrijfvermogen', 'aasvorm', 'aasprimairekleur', 'aassecundairekleur', 'aasratel', 'aastail'
-        ];
-        
-        categories.forEach(category => {
-            const options = DropdownManager.getOptions(category);
-            const container = document.getElementById(`${category}List`);
-            const countElement = document.getElementById(`${category}Count`);
-            
-            if (!container) return;
-            
-            if (countElement) {
-                countElement.textContent = options.length;
-            }
-            
-            if (options.length === 0) {
-                container.innerHTML = '<p style="color: #666; text-align: center; margin: 4px 0;">Geen opties</p>';
-                return;
-            }
-            
-            container.innerHTML = options.map(option => `
-                <div style="
-                    display: flex;
-                    align-items: center;
-                    gap: 4px;
-                    padding: 2px 4px;
-                    margin: 1px 0;
-                    background: white;
-                    border-radius: 2px;
-                    border: 1px solid #eee;
-                ">
-                    <span style="flex: 1;" title="${option}">${option}</span>
-                    <button onclick="DataManager.removeDropdownOption('${category}', '${option.replace(/'/g, "\\'")}', this)" style="
-                        padding: 1px 4px;
-                        background: #f44336;
-                        color: white;
-                        border: none;
-                        border-radius: 2px;
-                        cursor: pointer;
-                        font-size: 0.6em;
-                        line-height: 1;
-                    " title="Verwijder">×</button>
-                </div>
-            `).join('');
-        });
     },
     
     // Location Management Functions
@@ -689,50 +534,6 @@ const DataManager = {
             
             const cloudText = this.getCloudSyncInfo().available ? ' (Cloud sync ready)' : '';
             showStatus(`Locatie "${location}" verwijderd${cloudText}`, 'success');
-        }
-    },
-    
-    // Dropdown Management Functions
-    addDropdownOption: function(category) {
-        const input = document.getElementById(`new${category}Input`);
-        if (!input) return;
-        
-        const newOption = input.value.trim();
-        
-        if (!newOption) {
-            alert('Voer een nieuwe optie in');
-            return;
-        }
-        
-        if (DropdownManager.addOption(category, newOption)) {
-            input.value = '';
-            this.updateDropdownSections();
-            
-            // Update main UI
-            if (typeof updateSessionsList === 'function') updateSessionsList();
-            if (typeof updateDataTable === 'function') updateDataTable();
-            
-            const cloudText = this.getCloudSyncInfo().available ? ' (Cloud sync ready)' : '';
-            const newFieldText = (category === 'zonschaduw' || category === 'bodemhardheid') ? ' (NIEUW VELD)' : '';
-            const aasFieldText = category.startsWith('aas') ? ' (AAS EIGENSCHAP - FASE 1.1.1)' : '';
-            showStatus(`"${newOption}" toegevoegd aan ${category}${newFieldText}${aasFieldText}${cloudText}`, 'success');
-        } else {
-            showStatus(`"${newOption}" bestaat al in ${category}`, 'warning');
-        }
-    },
-    
-    removeDropdownOption: function(category, option, buttonElement) {
-        if (confirm(`Weet je zeker dat je "${option}" wilt verwijderen uit ${category}?\n\nDit kan niet ongedaan worden gemaakt.`)) {
-            if (DropdownManager.removeOption(category, option)) {
-                this.updateDropdownSections();
-                
-                // Update main UI
-                if (typeof updateSessionsList === 'function') updateSessionsList();
-                if (typeof updateDataTable === 'function') updateDataTable();
-                
-                const cloudText = this.getCloudSyncInfo().available ? ' (Cloud sync ready)' : '';
-                showStatus(`"${option}" verwijderd uit ${category}${cloudText}`, 'success');
-            }
         }
     },
     
@@ -1934,44 +1735,6 @@ const LureManager = {
 
 // ================================
 // DEBUG FUNCTIONS - EXTRACTED TO debug-info.js
-// ================================
-// Fallback voor diagnoseInitializationIssue (wordt nog door andere code gebruikt)
-function diagnoseInitializationIssue() {
-    if (typeof debugInfo !== 'undefined' && debugInfo.diagnoseInitializationIssue) {
-        return debugInfo.diagnoseInitializationIssue();
-    } else {
-        console.error('Debug system not loaded - diagnoseInitializationIssue not available');
-        alert('Debug systeem niet geladen. Herlaad de pagina.');
-        return false;
-    }
-}
-
-// Minimale debugInfo fallback (voor backward compatibility)
-if (typeof debugInfo === 'undefined') {
-    window.debugInfo = {
-        show: function() {
-            console.error('Debug system not loaded from debug-info.js');
-            alert('Debug systeem niet beschikbaar. Check of debug-info.js correct geladen is.');
-        },
-        checkWaypointsExist: function() {
-            console.error('Debug system not loaded');
-            return false;
-        },
-        checkGPSDataValid: function() {
-            console.error('Debug system not loaded');
-            return false;
-        },
-        diagnoseInitializationIssue: function() {
-            console.error('Debug system not loaded');
-            return false;
-        }
-    };
-}
-
-// Export functions (behoud bestaande API)
-window.diagnoseInitializationIssue = diagnoseInitializationIssue;
-
-console.log('Debug functions redirected to debug-info.js');
 
 // ================================
 // Enhanced Utility Functions

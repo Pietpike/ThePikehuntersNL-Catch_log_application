@@ -19,7 +19,6 @@ async function validateSession() {
 
         const errors = [];
         const warnings = [];
-        const isFieldSession = window.currentSession?.origin === 'veld';
 
         // ===== SESSIE VALIDATIE =====
         if (!enrichmentSession.locatie || enrichmentSession.locatie.trim() === '') {
@@ -29,11 +28,6 @@ async function validateSession() {
 
         if (!enrichmentSession.start_tijd && !enrichmentSession.session_start_datetime) {
             errors.push('Starttijd is verplicht');
-            console.log('❌ VALIDATION ERROR:', errors[errors.length-1]);
-        }
-
-        if (!enrichmentCatches || enrichmentCatches.length === 0) {
-            errors.push('Minimaal 1 vangst is verplicht');
             console.log('❌ VALIDATION ERROR:', errors[errors.length-1]);
         }
 
@@ -51,14 +45,13 @@ async function validateSession() {
                 warnings.push(`Vangst ${catchNum}: Geen lengte opgegeven`);
             }
 
-            console.log(`🔍 GPS DEBUG - Catch ${catchNum}:`, { id: catch_.id, gps_lat: catch_.gps_lat, gps_lng: catch_.gps_lng, gps_long: catch_.gps_long, full_catch: catch_ });
+            console.log(`🔍 GPS DEBUG - Catch ${catchNum}:`, { catch_id: catch_.catch_id, gps_lat: catch_.gps_lat, gps_long: catch_.gps_long, full_catch: catch_ });
 
-            // GPS check: veld-sessies gebruiken gps_lng, handmatige sessies gebruiken gps_long
-            const hasGpsLng = isFieldSession ? catch_.gps_lng : catch_.gps_long;
+            // GPS check: veld-sessies en handmatige sessies gebruiken gps_long
+            const hasGpsLng = catch_.gps_long;
             if (!catch_.gps_lat || !hasGpsLng) {
-                const hasSessionGps = isFieldSession
-                    ? (enrichmentSession.gps_lat && enrichmentSession.gps_lng)
-                    : (enrichmentSession.session_start_latitude && enrichmentSession.session_start_longitude);
+                const s = Phase4Utils.normalizeSession(enrichmentSession, window.currentSession?.origin);
+                const hasSessionGps = s.gpsLat && s.gpsLng;
 
                 if (!hasSessionGps) {
                     errors.push(`Vangst ${catchNum}: Geen GPS coördinaten beschikbaar`);
@@ -66,6 +59,20 @@ async function validateSession() {
                 } else {
                     warnings.push(`Vangst ${catchNum}: Geen vangst-GPS, fallback naar sessie-GPS`);
                 }
+            }
+
+            // Aas check
+            const nc = Phase4Utils.normalizeCatch(catch_, window.currentSession?.origin);
+            const enrichmentData = window.catchEnrichmentData[nc.id];
+            if (!enrichmentData?.aas || enrichmentData.aas.trim() === '') {
+                errors.push(`Vangst ${catchNum}: Aas is verplicht`);
+                console.log('❌ VALIDATION ERROR:', errors[errors.length-1]);
+            }
+
+            // Techniek check
+            if (!enrichmentData?.techniek || enrichmentData.techniek.trim() === '') {
+                errors.push(`Vangst ${catchNum}: Techniek is verplicht`);
+                console.log('❌ VALIDATION ERROR:', errors[errors.length-1]);
             }
         });
 
@@ -211,6 +218,8 @@ function renderValidationReport(result) {
  * KRITISCH: Atomaire operatie, alle-of-niks
  */
 async function makeSessionFinal() {
+    console.log('🚨 makeSessionFinal CALLED', window.currentSession?.origin);
+
     if (!validationResult || !validationResult.isValid) {
         alert('Validatie eerst uitvoeren');
         return;
@@ -219,59 +228,116 @@ async function makeSessionFinal() {
     try {
         console.log('💾 Making session final...');
 
-        const isFieldSession = window.currentSession?.origin === 'veld';
+        console.log('🔍 makeSessionFinal START:', {
+            origin: window.currentSession?.origin,
+            isFieldSession: window.currentSession?.origin === 'veld',
+            enrichmentSessionId: enrichmentSession?.id,
+            enrichmentSessionSessionId: enrichmentSession?.session_id,
+            currentSessionDbId: window.currentSession?.dbId
+        });
+
         const session = validationResult.sessionData;
         const catches = validationResult.catchesData;
 
-        // ===== STAP 1: Check Duplicates =====
-        console.log('Step 1: Checking for duplicate sessions...');
+        // Bepaal huidige sessie ID en tijden voor exclusie in duplicate check
+        const s = Phase4Utils.normalizeSession(enrichmentSession, window.currentSession?.origin);
+        const currentSessionId = s.id;
 
-        const { data: duplicates, error: dupError } = await supabaseManager.client
-            .from('sessions')
-            .select('id')
-            .eq('locatie', session.locatie)
-            .gte('session_start_date', isFieldSession ? session.datum : session.session_start_date)
-            .lte('session_start_date', isFieldSession ? session.datum : session.session_start_date)
-            .limit(1);
+        // ===== STAP 1: Check Duplicates with Time Overlap =====
+        console.log('Step 1: Checking for duplicate sessions with time overlap...');
+
+        // Bepaal start/eind tijden voor overlap check
+        const checkStartDatetime = s.startDatetime;
+        const checkEndDatetime = s.endDatetime;
+
+        console.log('🔍 OVERLAP CHECK PARAMETERS:', {
+            checkStartDatetime,
+            checkEndDatetime,
+            locatie: session.locatie,
+            origin: window.currentSession?.origin
+        });
+
+        // Query: zoeek sessies met dezelfde locatie EN temporele overlap
+        // Overlap occurs when: session_start_datetime < our_end AND session_end_datetime > our_start
+        const query = supabaseManager.client
+            .from(DB_SCHEMA.sessions.table)
+            .select('session_id, locatie, session_start_datetime, session_end_datetime, sessie_naam')
+            .eq(DB_SCHEMA.sessions.cols.locatie, session.locatie)
+            .eq(DB_SCHEMA.sessions.cols.definitief, true)  // ⭐ Only match finalized sessions
+            .neq(DB_SCHEMA.sessions.pk, currentSessionId);  // ⭐ Exclude current session
+
+        // Voeg time overlap filters toe
+        if (checkStartDatetime && checkEndDatetime) {
+            query
+                .lt(DB_SCHEMA.sessions.cols.session_start_datetime, checkEndDatetime)   // Sessie start vóór onze eind
+                .gt(DB_SCHEMA.sessions.cols.session_end_datetime, checkStartDatetime);   // Sessie eind na onze start
+        }
+
+        const { data: duplicates, error: dupError } = await query.limit(5);
 
         if (dupError) throw dupError;
 
         let newSessionId = null;
 
         if (duplicates && duplicates.length > 0) {
-            const merge = confirm(
-                'Sessie met dezelfde datum/locatie bestaat al.\n\nWil je vangsten samenvoegen met bestaande sessie?'
+            console.log(`⚠️ Found ${duplicates.length} overlapping session(s):`, duplicates);
+
+            // Toon waarschuwing met details van gevonden sessies
+            const overlapDetails = duplicates
+                .map(dup => `  • ${dup.sessie_naam || dup.locatie} (${dup.session_start_datetime})`)
+                .join('\n');
+
+            const continueFinalization = confirm(
+                `⚠️ Er ${duplicates.length === 1 ? 'bestaat' : 'bestaan'} al ${duplicates.length} sessie(s) op deze datum/locatie met overlappende tijden:\n\n${overlapDetails}\n\nWil je toch doorgaan met finaliseren?`
             );
 
-            if (!merge) {
-                console.log('❌ User cancelled merge, stopped finalization');
+            if (!continueFinalization) {
+                console.log('❌ User cancelled finalization due to overlap warning');
                 return;
             }
 
-            newSessionId = duplicates[0].id;
-            console.log(`✓ Will merge with existing session ${newSessionId}`);
+            console.log(`✓ User confirmed to proceed despite overlap warnings`);
         } else {
-            // ===== STAP 2: Insert Session =====
-            console.log('Step 2: Inserting new session...');
+            console.log('✓ No overlapping sessions found');
+        }
+
+        // ===== STAP 2: Insert or Update Session =====
+        const isFieldSession = window.currentSession?.origin === 'veld';
+        if (isFieldSession) {
+            // ===== STAP 2A: Insert New Session (Veld-sessies) =====
+            console.log('Step 2A: Inserting new session (veld-sessie)...');
 
             // Map velden afhankelijk van origin
+            const startDatetime = session.start_tijd;
+            const startDate = new Date(startDatetime);
+
+            // Extraheer datum/tijd componenten
+            const startHour = startDate.getHours();
+            const startMonth = startDate.getMonth() + 1;  // getMonth() is 0-indexed
+
             const sessionRecord = {
                 team_member: supabaseManager?.teamMember || 'unknown',
-                session_start_datetime: isFieldSession ? session.start_tijd : session.session_start_datetime,
-                session_end_datetime: isFieldSession ? session.eind_tijd : session.session_end_datetime,
-                session_start_date: isFieldSession ? session.datum : session.session_start_date,
-                locatie: session.locatie,
-                watersoort: session.watersoort,
-                stroomsnelheid: session.stroomsnelheid,
-                watertemperatuur_measured: isFieldSession ? session.watertemperatuur : session.watertemperatuur_measured,
-                helderheid: session.helderheid,
-                sessie_naam: `Veld - ${new Date(isFieldSession ? session.datum : session.session_start_date).toLocaleDateString('nl-NL')} ${session.locatie}`,
+                session_start_datetime: startDatetime,
+                session_end_datetime: session.eind_tijd || null,
+                session_start_date: session.datum,
+                session_start_hour: startHour,
+                session_start_month: startMonth,
+                locatie: session.locatie || null,
+                watersoort: session.watersoort || null,
+                stroomsnelheid: session.stroomsnelheid || null,
+                watertemperatuur_measured: session.watertemperatuur || null,
+                helderheid: session.helderheid || null,
+                aantal_hengels: session.aantal_hengels ? parseInt(session.aantal_hengels) : null,
+                sessie_naam: `Veld - ${new Date(session.datum).toLocaleDateString('nl-NL')} ${session.locatie}`,
                 gpx_filename: null,
+                weather_id: null,
                 definitief: true
             };
 
+            console.log('📋 SESSION RECORD BEFORE INSERT:', JSON.stringify(sessionRecord, null, 2));
+
             const { data: newSession, error: sessionError } = await supabaseManager.client
-                .from('sessions')
+                .from(DB_SCHEMA.sessions.table)
                 .insert(sessionRecord)
                 .select();
 
@@ -281,8 +347,69 @@ async function makeSessionFinal() {
                 throw new Error('Session insert returned no data');
             }
 
-            newSessionId = newSession[0].id;
-            console.log(`✓ Session inserted with ID: ${newSessionId}`);
+            console.log('📊 SESSIONS INSERT RESPONSE:', JSON.stringify(newSession[0], null, 2));
+            console.log('🔍 CHECKING SESSION ID FIELDS:', {
+                id: newSession[0].id,
+                session_id: newSession[0].session_id,
+                id_type: typeof newSession[0].id,
+                session_id_type: typeof newSession[0].session_id
+            });
+
+            // Probeer beide mogelijke velden
+            newSessionId = newSession[0].session_id || newSession[0].id;
+            console.log(`✓ Session inserted with ID: ${newSessionId} (using ${newSession[0].session_id ? 'session_id' : 'id'})`);
+        } else {
+            // ===== STAP 2B: Update Existing Session (Handmatige sessies) =====
+            console.log('Step 2B: Updating existing concept session (handmatige sessie)...');
+
+            const sessionId = enrichmentSession.session_id;
+            console.log(`Updating session ${sessionId} to definitief=true with enriched data`);
+
+            // Map velden voor handmatige sessies
+            const startDatetime = session.session_start_datetime;
+            const startDate = new Date(startDatetime);
+
+            // Extraheer datum/tijd componenten
+            const startHour = startDate.getHours();
+            const startMonth = startDate.getMonth() + 1;
+
+            const updateRecord = {
+                session_start_datetime: startDatetime,
+                session_end_datetime: session.session_end_datetime || null,
+                session_start_date: session.session_start_date,
+                session_start_hour: startHour,
+                session_start_month: startMonth,
+                locatie: session.locatie || null,
+                watersoort: session.watersoort || null,
+                stroomsnelheid: session.stroomsnelheid || null,
+                watertemperatuur_measured: session.watertemperatuur_measured || null,
+                helderheid: session.helderheid || null,
+                definitief: true  // ⭐ KRITIEK: Zet concept sessie op definitief
+            };
+
+            console.log('📋 UPDATE RECORD:', JSON.stringify(updateRecord, null, 2));
+
+            const { data: updatedSession, error: updateError } = await supabaseManager.client
+                .from(DB_SCHEMA.sessions.table)
+                .update(updateRecord)
+                .eq(DB_SCHEMA.sessions.pk, sessionId)
+                .select()
+                .single();
+
+            if (updateError) throw updateError;
+
+            if (!updatedSession) {
+                throw new Error('Session update returned no data');
+            }
+
+            console.log('📊 SESSIONS UPDATE RESPONSE:', JSON.stringify(updatedSession, null, 2));
+            console.log('🔍 UPDATED SESSION ID FIELD:', {
+                session_id: updatedSession.session_id,
+                id: updatedSession.id
+            });
+
+            newSessionId = updatedSession.session_id;
+            console.log(`✓ Session updated to definitief=true with ID: ${newSessionId}`);
         }
 
         // ===== STAP 2.5: Process Aas Names to IDs =====
@@ -303,9 +430,12 @@ async function makeSessionFinal() {
                 if (typeof processSessionAasjes === 'function') {
                     // Create temporary session object met aas data
                     const tempSession = {
-                        waypoints: enrichmentCatches.map(catch_ => ({
-                            catchData: window.catchEnrichmentData[catch_.id] || {}
-                        }))
+                        waypoints: enrichmentCatches.map(catch_ => {
+                            const nc = Phase4Utils.normalizeCatch(catch_, window.currentSession?.origin);
+                            return {
+                                catchData: window.catchEnrichmentData[nc.id] || {}
+                            };
+                        })
                     };
                     const aasResult = await processSessionAasjes(tempSession);
                     aasIdMapping = aasResult.idMapping || {};
@@ -323,14 +453,11 @@ async function makeSessionFinal() {
         console.log('Step 3: Inserting catches...');
 
         const catchRecords = catches.map(catch_ => {
-            const vangstTijd = isFieldSession ? catch_.vangst_tijd : catch_.catch_datetime;
-            const catchDate = new Date(vangstTijd);
+            const nc = Phase4Utils.normalizeCatch(catch_, window.currentSession?.origin);
+            const fallbacks = Phase4Utils.getCatchFallbacks(catch_, enrichmentSession, window.currentSession?.origin);
 
-            // Basis catch record
-            // FIX: Voor veld-sessies leest uit gps_lng, voor handmatige uit gps_long
-            const catchGpsLng = isFieldSession ?
-                (catch_.gps_lng || enrichmentSession.gps_lng) :
-                (catch_.gps_long || enrichmentSession.session_start_longitude);
+            const vangstTijd = nc.vangstTijd;
+            const catchDate = new Date(vangstTijd);
 
             const catchRecord = {
                 session_id: newSessionId,
@@ -340,17 +467,21 @@ async function makeSessionFinal() {
                 catch_datetime: vangstTijd,
                 catch_hour: catchDate.getHours(),
                 catch_month: catchDate.getMonth() + 1,
-                gps_lat: catch_.gps_lat || enrichmentSession.gps_lat || enrichmentSession.session_start_latitude,
-                gps_long: catchGpsLng,
-                waypoint_naam: isFieldSession ? catch_.notities : catch_.waypoint_naam,
-                linked_catch_id: null,
-                linked_sighting_id: null
+                gps_lat: fallbacks.gpsLat,
+                gps_long: fallbacks.gpsLng,
+                // Fallback naar sessie waarden als vangst-override leeg is
+                diepte: fallbacks.diepte,
+                vangsthoogte: catch_.vangsthoogte ?? null,
+                bodemhardheid: fallbacks.bodemhardheid,
+                notities: catch_.notities || null,
+                linked_catch_id: catch_.linked_catch_id ?? null,
+                linked_sighting_id: catch_.linked_sighting_id ?? null
             };
 
             // Voeg enrichment data toe van window.catchEnrichmentData (Groep 2 velden)
-            const enrichmentData = window.catchEnrichmentData[catch_.id];
+            const enrichmentData = window.catchEnrichmentData[nc.id];
             if (enrichmentData) {
-                console.log(`💾 Adding enrichment data for catch ${catch_.id}:`, enrichmentData);
+                console.log(`💾 Adding enrichment data for catch ${catch_.catch_id}:`, enrichmentData);
 
                 // Aas: Probeer aas_id te gebruiken, fallback naar naam
                 if (enrichmentData.aas) {
@@ -367,42 +498,111 @@ async function makeSessionFinal() {
 
                 if (enrichmentData.techniek) catchRecord.techniek = enrichmentData.techniek;
                 if (enrichmentData.diepte) catchRecord.diepte = enrichmentData.diepte;
-                if (enrichmentData.bodem_hardheid) catchRecord.bodem_hardheid = enrichmentData.bodem_hardheid;
 
-                // Override velden
-                if (enrichmentData.helderheid_override) catchRecord.helderheid = enrichmentData.helderheid_override;
-                if (enrichmentData.stroomsnelheid_override) catchRecord.stroomsnelheid = enrichmentData.stroomsnelheid_override;
-                if (enrichmentData.watertemperatuur_override) catchRecord.watertemperatuur_measured = enrichmentData.watertemperatuur_override;
+                // Nieuwe verrijkingsvelden
+                if (enrichmentData.vissnelheid) catchRecord.vissnelheid = enrichmentData.vissnelheid;
+                if (enrichmentData.booster) catchRecord.booster = enrichmentData.booster;
+                if (enrichmentData.gewicht) catchRecord.gewicht = enrichmentData.gewicht;
+                if (enrichmentData.structuur) catchRecord.structuur = enrichmentData.structuur;
+                if (enrichmentData.aasvis) catchRecord.aasvis_op_stek = enrichmentData.aasvis;
+                if (enrichmentData.zon_schaduw) catchRecord.zon_schaduw = enrichmentData.zon_schaduw;
+
+                // Override velden - schrijf naar specifieke override kolommen
+                if (enrichmentData.helderheid_override) {
+                    catchRecord.helderheid_override = enrichmentData.helderheid_override;
+                    console.log(`   - helderheid_override: "${enrichmentData.helderheid_override}"`);
+                }
+                if (enrichmentData.stroomsnelheid_override) {
+                    catchRecord.stroomsnelheid_override = enrichmentData.stroomsnelheid_override;
+                    console.log(`   - stroomsnelheid_override: "${enrichmentData.stroomsnelheid_override}"`);
+                }
+                if (enrichmentData.watertemperatuur_override) {
+                    catchRecord.watertemperatuur_override = enrichmentData.watertemperatuur_override;
+                    console.log(`   - watertemperatuur_override: ${enrichmentData.watertemperatuur_override}`);
+                }
             }
 
             return catchRecord;
         });
 
-        const { data: newCatches, error: catchError } = await supabaseManager.client
-            .from('catches')
-            .insert(catchRecords)
-            .select();
-
-        if (catchError) throw catchError;
-
+        let newCatches;
         const catchIdMap = {};
-        if (newCatches) {
-            newCatches.forEach((newCatch, idx) => {
-                catchIdMap[catches[idx].id] = newCatch.id;
-            });
+
+        if (isFieldSession) {
+            // VELDSESSIES: INSERT nieuwe catches
+            console.log('Step 3A: Inserting catches (field session)...');
+            const { data: insertedCatches, error: catchError } = await supabaseManager.client
+                .from(DB_SCHEMA.catches.table)
+                .insert(catchRecords)
+                .select();
+
+            if (catchError) throw catchError;
+
+            newCatches = insertedCatches;
+
+            console.log('📊 COMPLETE CATCHES INSERT RESPONSE:', JSON.stringify(newCatches, null, 2));
+            if (newCatches && newCatches.length > 0) {
+                console.log('🔍 CHECKING CATCH ID FIELDS (first catch):', {
+                    id: newCatches[0].id,
+                    catch_id: newCatches[0].catch_id,
+                    id_type: typeof newCatches[0].id,
+                    catch_id_type: typeof newCatches[0].catch_id
+                });
+
+                console.log('🔍 CHECKING OVERRIDE FIELDS (first catch):', {
+                    helderheid_override: newCatches[0].helderheid_override,
+                    stroomsnelheid_override: newCatches[0].stroomsnelheid_override,
+                    watertemperatuur_override: newCatches[0].watertemperatuur_override
+                });
+            }
+
+            // Bouw ID map voor veldsessies: old field_catch_id → new catch_id
+            if (newCatches) {
+                newCatches.forEach((newCatch, idx) => {
+                    const catchId = newCatch.catch_id || newCatch.id;
+                    const fieldCatchId = catches[idx].id;  // field_catches.id
+                    catchIdMap[fieldCatchId] = catchId;
+                    console.log(`   Catch ${idx + 1}: fieldCatchId=${fieldCatchId} → catchId=${catchId} (using ${newCatch.catch_id ? 'catch_id' : 'id'})`);
+                });
+            }
+
+            console.log(`✓ ${newCatches?.length || 0} catches inserted`);
+        } else {
+            // HANDMATIGE SESSIES: UPDATE bestaande catches met verrijkingsdata
+            console.log('Step 3B: Updating catches (manual session)...');
+
+            for (let idx = 0; idx < catches.length; idx++) {
+                const catch_ = catches[idx];
+                const catchRecord = catchRecords[idx];
+                const catchPk = catch_.catch_id;
+
+                const { error: updateError } = await supabaseManager.client
+                    .from(DB_SCHEMA.catches.table)
+                    .update(catchRecord)
+                    .eq(DB_SCHEMA.catches.pk, catchPk);
+
+                if (updateError) throw updateError;
+
+                // ID map voor handmatige sessies: catch_id → catch_id (ID blijft hetzelfde)
+                catchIdMap[catchPk] = catchPk;
+                console.log(`   Catch ${idx + 1}: catch_id=${catchPk} updated with enrichment data`);
+            }
+
+            newCatches = catches.map(c => ({ ...c, catch_id: c.catch_id }));  // Voor consistentie
+            console.log(`✓ ${newCatches?.length || 0} catches updated`);
         }
 
-        console.log(`✓ ${newCatches?.length || 0} catches inserted`);
+        console.log('📋 CATCH ID MAP:', catchIdMap);
 
         // ===== STAP 4: Update Field Tables =====
-        if (isFieldSession) {
+        if (window.currentSession?.origin === 'veld') {
             console.log('Step 4: Updating field_sessions...');
 
             // Update field_sessions
             const { error: fsError } = await supabaseManager.client
-                .from('field_sessions')
-                .update({ session_id: newSessionId })
-                .eq('id', enrichmentSession.id);
+                .from(DB_SCHEMA.field_sessions.table)
+                .update({ [DB_SCHEMA.field_sessions.cols.session_id]: newSessionId })
+                .eq(DB_SCHEMA.field_sessions.pk, enrichmentSession.id);
 
             if (fsError) throw fsError;
 
@@ -411,12 +611,12 @@ async function makeSessionFinal() {
             // Update field_catches
             for (const fieldCatchId of Object.keys(catchIdMap)) {
                 const { error: fcError } = await supabaseManager.client
-                    .from('field_catches')
+                    .from(DB_SCHEMA.field_catches.table)
                     .update({
-                        session_id: newSessionId,
-                        catch_id: catchIdMap[fieldCatchId]
+                        [DB_SCHEMA.field_catches.cols.session_id]: newSessionId,
+                        [DB_SCHEMA.field_catches.cols.catch_id]: catchIdMap[fieldCatchId]
                     })
-                    .eq('id', fieldCatchId);
+                    .eq(DB_SCHEMA.field_catches.pk, fieldCatchId);
 
                 if (fcError) throw fcError;
             }
@@ -493,4 +693,10 @@ function backToEnrichment() {
 // Initialize on DOM ready
 document.addEventListener('DOMContentLoaded', () => {
     console.log('✓ phase4-validation.js loaded');
+
+    // Export functions to window
+    window.validateSession = validateSession;
+    window.makeSessionFinal = makeSessionFinal;
+    window.goToValidation = goToValidation;
+    window.backToEnrichment = backToEnrichment;
 });

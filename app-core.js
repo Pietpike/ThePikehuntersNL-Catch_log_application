@@ -31,6 +31,51 @@ const FEATURE_FLAGS = {
 };
 
 // ================================
+// GLOBAL VARIABLES - Legacy from map-processing.js
+// ================================
+
+let sessions = [];           // Active sessions array
+let waypoints = [];          // All waypoints from all sessions
+let storedFiles = [];        // Stored GPX/files (legacy)
+let activeSpeciesFilter = null;  // Current species filter for display
+
+// ================================
+// CONFIG OBJECT - Application Configuration
+// ================================
+
+const CONFIG = {
+    // Session display colors (cycled for multiple sessions)
+    sessionColors: [
+        '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8',
+        '#F7DC6F', '#BB8FCE', '#85C1E2', '#F8B88B', '#85C1E2'
+    ],
+
+    // Common pike species for validation
+    commonSpecies: [
+        'Baars', 'Snoek', 'Karper', 'Brasem', 'Schubkarper',
+        'Alver', 'Rode oog', 'Winde', 'Blankvoorn', 'Aal',
+        'Paling', 'Zeelt', 'Kolblei', 'Voorn', 'Modderaal'
+    ],
+
+    // UI settings
+    ui: {
+        statusTimeout: 4000  // Status message display timeout
+    },
+
+    // Validation settings
+    batchSize: 50,
+    similarity: {
+        threshold: 0.7
+    },
+    duplicateDetection: {
+        enabled: true
+    },
+
+    // Legacy - placeholder for removed Supabase config
+    tables: {}
+};
+
+// ================================
 // DATABASE SYNC WORKFLOW FUNCTIONS
 // ================================
 
@@ -69,7 +114,6 @@ function updateCloudSyncStatus() {
                 
             // Update onClick handler naar nieuwe functie voor DATABASE_SYNC_ONLY mode
             if (FEATURE_FLAGS.DATABASE_SYNC_ONLY) {
-                cloudBtn.onclick = syncSessionsToDatabase; // In plaats van syncToCloud
                 cloudBtn.title = 'Upload alle sessies naar nieuwe 3-tabel database structuur';
                 
                 // Enhance styling for primary workflow
@@ -123,104 +167,69 @@ function updateCloudSyncStatus() {
 }
 
 // ================================
-// RESET FUNCTION
+// STATUS MESSAGE DISPLAY - Verplaatst van map-processing.js
 // ================================
 
-function clearAll() {
-    if (!confirm('Weet je zeker dat je alles wilt resetten?')) return;
-    
-    gpxData = [];
-    sessions = [];
-    trackPoints = [];
-    waypoints = [];
-    storedFiles = [];
-    activeSpeciesFilter = null;
-    
-    clearMap();
-    closeLureModal();
-    
-    // Close any modals
-    if (document.getElementById('validationModal')) {
-        closeValidationModal();
-    }
-    if (document.getElementById('exportChoiceModal')) {
-        closeExportChoiceModal();
-    }
-    
-    document.getElementById('sessionsList').innerHTML = '';
-    document.getElementById('speciesFilter').innerHTML = '';
-    document.getElementById('dataTableBody').innerHTML = '';
-    document.getElementById('sessionCount').textContent = '0';
-    document.getElementById('catchCount').textContent = '0';
-    document.getElementById('speciesCount').textContent = '0';
-    document.getElementById('totalTime').textContent = '0h';
-    document.getElementById('fileCount').textContent = '';
+function showStatus(message, type) {
+    const statusDiv = document.getElementById('statusMessage');
+    statusDiv.textContent = message;
+    statusDiv.className = `status-message status-${type}`;
+    statusDiv.style.display = 'block';
 
-    document.getElementById('addSessionBtn').disabled = false;
-    document.getElementById('gpxInput').value = '';
-    
-    // Reset validation state
-    window.validationState = {
-        enabled: true,
-        lastReport: null,
-        phases: ['A', 'B', 'C', 'V', 'Cloud'],
-        exportBlocked: false,
-        cloudSyncBlocked: false,
-        lastValidationTime: 0,
-        validationCooldown: 2000
-    };
-    
-    window.blockedCatchAttempts = 0;
-    
-    if (typeof ValidationStateManager !== 'undefined') {
-        ValidationStateManager.emergencyReset();
-    }
-    
-    updateCloudSyncStatus();
-    
-    showStatus(FEATURE_FLAGS.DATABASE_SYNC_ONLY ? 
-        'Alles gereset - Database sync ready' : 
-        'Alles gereset', 'info');
+    // Enhanced timeout met type-specific durations
+    const timeout = type === 'error' ? 6000 : 4000;
+
+    setTimeout(() => {
+        statusDiv.style.display = 'none';
+    }, timeout);
+
+    // Log naar console voor debugging
+    console.log(`Status (${type}): ${message}`);
 }
 
 // ================================
 // ENHANCED INITIALIZATION - DATABASE SYNC WORKFLOW
 // ================================
+
 window.onload = function() {
     const version = FEATURE_FLAGS.DATABASE_SYNC_ONLY ? 'Database Sync Only v1.1' : 'Enhanced Export System';
-    
+
     try {
-        initMap();
-        initLureSelector();
-        
-        const fileInput = document.getElementById('gpxInput');
-        if (fileInput) {
-            fileInput.addEventListener('change', handleFileSelect);
-        }
-        
         // Initialize cloud sync status monitoring
         if (typeof supabaseManager !== 'undefined') {
             setInterval(updateCloudSyncStatus, 5000);
         }
-        
+
         updateCloudSyncStatus();
 
-        // Configure UI based on feature flags
-        document.getElementById('addSessionBtn').style.display = 'inline-block';
-        
+        // Initialize lure selector (load aasjes from localStorage)
+        if (typeof initLureSelector === 'function') {
+            initLureSelector();
+        }
+
         // Initialize blocked attempts counter
         window.blockedCatchAttempts = 0;
 
-        const statusMessage = FEATURE_FLAGS.DATABASE_SYNC_ONLY ? 
+        const statusMessage = FEATURE_FLAGS.DATABASE_SYNC_ONLY ?
             'ThePikehunters Catchlog - Database Sync Workflow + Aas Management geactiveerd!' :
             'ThePikehunters Catchlog geladen met Enhanced Export System!';
-            
-        showStatus(statusMessage, 'success');
-        
+
+        // Use window.showStatus to ensure it's available
+        if (typeof window.showStatus === 'function') {
+            window.showStatus(statusMessage, 'success');
+        } else {
+            console.log(`Status: ${statusMessage}`);
+        }
+
         if (FEATURE_FLAGS.DEBUG_MODE) {
             console.log('Feature flags configuration:', FEATURE_FLAGS);
         }
-        
+
+        // Start directly with Fase 4 overview
+        if (typeof showPhase4Screen === 'function') {
+            showPhase4Screen();
+        }
+
     } catch (error) {
         console.error('Initialization error:', error);
         alert('Fout bij initialiseren: ' + error.message);
@@ -231,11 +240,11 @@ window.onload = function() {
 // GLOBAL EXPORTS - DATABASE SYNC FOCUSED
 // ================================
 
+// Status Display
+window.showStatus = showStatus;
+
 // Cloud Sync Status Update
 window.updateCloudSyncStatus = updateCloudSyncStatus;
-
-// Core Functions
-window.clearAll = clearAll;
 
 // Feature Flags (READ-ONLY)
 window.FEATURE_FLAGS = Object.freeze({...FEATURE_FLAGS});

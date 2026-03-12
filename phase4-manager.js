@@ -22,22 +22,22 @@ async function loadUnprocessedSessions() {
 
         // Load veld-sessies (field_sessions)
         const { data: fieldSessions, error: fieldError } = await supabaseManager.client
-            .from('field_sessions')
+            .from(DB_SCHEMA.field_sessions.table)
             .select('*, field_catches(count)')
-            .eq('genegeerd', false)
-            .is('session_id', null)
-            .order('datum', { ascending: false });
+            .eq(DB_SCHEMA.field_sessions.cols.genegeerd, false)
+            .is(DB_SCHEMA.field_sessions.cols.session_id, null)
+            .order(DB_SCHEMA.field_sessions.cols.datum, { ascending: false });
 
         if (fieldError) throw fieldError;
 
         // Load handmatig aangemaakte sessies (sessions tabel)
         // WHERE definitief = FALSE AND genegeerd = FALSE
         const { data: manualSessions, error: manualError } = await supabaseManager.client
-            .from('sessions')
+            .from(DB_SCHEMA.sessions.table)
             .select('*, catches(count)')
-            .eq('definitief', false)
-            .eq('genegeerd', false)
-            .order('session_start_date', { ascending: false });
+            .eq(DB_SCHEMA.sessions.cols.definitief, false)
+            .eq(DB_SCHEMA.sessions.cols.genegeerd, false)
+            .order(DB_SCHEMA.sessions.cols.session_start_date, { ascending: false });
 
         if (manualError) throw manualError;
 
@@ -217,17 +217,16 @@ function renderSessionCard(session) {
 
     const originBadge = document.createElement('span');
     originBadge.className = 'phase4-origin-badge';
+    const badge = Phase4Utils.getSessionBadge(session.origin);
     originBadge.style.cssText = `
         display: inline-block;
         padding: 4px 10px;
         border-radius: 4px;
         font-size: 0.75em;
         font-weight: 600;
-        ${session.origin === 'veld'
-            ? 'background: #FFF3E0; color: #E65100;'
-            : 'background: #E3F2FD; color: #0D47A1;'}
+        background: ${badge.backgroundColor}; color: ${badge.color};
     `;
-    originBadge.textContent = session.origin === 'veld' ? '🎯 Veld' : '📝 Handmatig';
+    originBadge.textContent = badge.label;
 
     titleDiv.appendChild(locationEl);
     titleDiv.appendChild(originBadge);
@@ -253,7 +252,8 @@ function renderSessionCard(session) {
     buttonGroup.style.cssText = 'display: flex; gap: 8px; margin-top: 12px;';
 
     // Bepaal session ID (veld-sessies hebben 'id', handmatige sessies hebben 'session_id')
-    const sessionId = session.origin === 'veld' ? session.id : session.session_id;
+    const s = Phase4Utils.normalizeSession(session, session.origin);
+    const sessionId = s.id;
 
     // Verrijken button
     const enrichBtn = document.createElement('button');
@@ -292,27 +292,18 @@ async function deleteSessionWithConfirm(sessionId, origin) {
     }
 
     try {
-        if (origin === 'veld') {
-            // Veld-sessie: UPDATE field_sessions SET genegeerd = TRUE
-            const { error } = await supabaseManager.client
-                .from('field_sessions')
-                .update({ genegeerd: true })
-                .eq('id', sessionId);
+        const tables = Phase4Utils.getTableNames(origin);
+        const pks = Phase4Utils.getPrimaryKeys(origin);
 
-            if (error) throw error;
+        // UPDATE session als genegeerd
+        const { error } = await supabaseManager.client
+            .from(tables.sessionTable)
+            .update({ [DB_SCHEMA.field_sessions.cols.genegeerd]: true })
+            .eq(pks.sessionPk, sessionId);
 
-            console.log('✓ Veld-sessie gemarkeerd als genegeerd');
-        } else {
-            // Handmatige sessie: UPDATE sessions SET genegeerd = TRUE
-            const { error } = await supabaseManager.client
-                .from('sessions')
-                .update({ genegeerd: true })
-                .eq('session_id', sessionId);
+        if (error) throw error;
 
-            if (error) throw error;
-
-            console.log('✓ Handmatige sessie gemarkeerd als genegeerd');
-        }
+        console.log(`✓ ${origin === 'veld' ? 'Veld' : 'Handmatige'}-sessie gemarkeerd als genegeerd`);
 
         showStatus('Sessie verwijderd', 'success');
 
@@ -337,27 +328,16 @@ async function openEnrichmentScreen(sessionId, origin) {
         console.log(`🔧 Opening enrichment screen for ${origin} session: ${sessionId}`);
 
         // Laad volledige sessie-data
-        let sessionData;
+        const tables = Phase4Utils.getTableNames(origin);
+        const pks = Phase4Utils.getPrimaryKeys(origin);
 
-        if (origin === 'veld') {
-            const { data, error } = await supabaseManager.client
-                .from('field_sessions')
-                .select('*')
-                .eq('id', sessionId)
-                .single();
+        const { data: sessionData, error } = await supabaseManager.client
+            .from(tables.sessionTable)
+            .select('*')
+            .eq(pks.sessionPk, sessionId)
+            .single();
 
-            if (error) throw error;
-            sessionData = data;
-        } else {
-            const { data, error } = await supabaseManager.client
-                .from('sessions')
-                .select('*')
-                .eq('session_id', sessionId)
-                .single();
-
-            if (error) throw error;
-            sessionData = data;
-        }
+        if (error) throw error;
 
         // Sla op in global state
         window.currentSession = {
@@ -392,7 +372,6 @@ async function openEnrichmentScreen(sessionId, origin) {
         console.error('Error stack:', error?.stack);
         console.error('Error name:', error?.name);
         console.error('Current session state:', window.currentSession);
-        console.error('Origin:', origin);
         console.error('SessionId:', sessionId);
         alert('Fout bij openen sessie: ' + error.message);
     }
@@ -491,7 +470,243 @@ async function backToOverview() {
     loadUnprocessedSessions();
 }
 
+// ====================================
+// NIEUWE SESSIE MODAL
+// ====================================
+
+/**
+ * Toon modal voor aanmaken nieuwe handmatige sessie
+ * Integreert met Phase 4 workflow
+ */
+function showNewSessionModal() {
+    console.log('📋 Opening new session modal...');
+
+    // Maak modal overlay
+    const modalOverlay = document.createElement('div');
+    modalOverlay.id = 'newSessionModal-overlay';
+    modalOverlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+    `;
+
+    const modalContent = document.createElement('div');
+    modalContent.style.cssText = `
+        background: white;
+        border-radius: 8px;
+        padding: 30px;
+        max-width: 500px;
+        width: 90%;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    `;
+
+    // Modal Header
+    const header = document.createElement('h3');
+    header.textContent = '➕ Nieuwe Handmatige Sessie';
+    header.style.cssText = 'margin: 0 0 20px 0; color: #1a1a1a;';
+    modalContent.appendChild(header);
+
+    // Formulier
+    const form = document.createElement('div');
+    form.style.cssText = `
+        display: grid;
+        gap: 15px;
+        margin-bottom: 20px;
+    `;
+
+    // Helper: Maak een form field
+    const addField = (label, type, name, value = '', required = false) => {
+        const div = document.createElement('div');
+        div.style.cssText = 'display: flex; flex-direction: column;';
+
+        const labelEl = document.createElement('label');
+        labelEl.textContent = label + (required ? ' *' : '');
+        labelEl.style.cssText = 'font-weight: 600; margin-bottom: 5px; color: #333;';
+        div.appendChild(labelEl);
+
+        let input;
+        if (type === 'select') {
+            input = document.createElement('select');
+            input.style.cssText = 'padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.95em;';
+
+            // Voeg lege optie toe
+            const emptyOpt = document.createElement('option');
+            emptyOpt.value = '';
+            emptyOpt.textContent = '— Selecteer —';
+            input.appendChild(emptyOpt);
+
+            // Voeg locaties toe
+            const locations = typeof LocationManager !== 'undefined' ? LocationManager.getAll() : [];
+            locations.forEach(loc => {
+                const opt = document.createElement('option');
+                opt.value = loc;
+                opt.textContent = loc;
+                input.appendChild(opt);
+            });
+        } else {
+            input = document.createElement('input');
+            input.type = type;
+            input.style.cssText = 'padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.95em;';
+            input.value = value;
+        }
+
+        input.name = name;
+        if (required) input.required = true;
+        div.appendChild(input);
+        form.appendChild(div);
+        return input;
+    };
+
+    // Velden
+    const fields = {};
+
+    // Vandaag als default datum
+    const today = new Date().toISOString().split('T')[0];
+    fields.datum = addField('Datum', 'date', 'datum', today, true);
+    fields.startTijd = addField('Starttijd', 'time', 'startTijd', '09:00', true);
+    fields.eindTijd = addField('Eindtijd', 'time', 'eindTijd', '17:00', true);
+    fields.locatie = addField('Locatie', 'select', 'locatie', '', true);
+
+    modalContent.appendChild(form);
+
+    // Knoppen
+    const buttonContainer = document.createElement('div');
+    buttonContainer.style.cssText = 'display: flex; gap: 10px; justify-content: flex-end;';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'btn btn-secondary';
+    cancelBtn.textContent = 'Annuleren';
+    cancelBtn.onclick = () => {
+        if (modalOverlay && modalOverlay.parentNode) {
+            modalOverlay.parentNode.removeChild(modalOverlay);
+        }
+    };
+    buttonContainer.appendChild(cancelBtn);
+
+    const createBtn = document.createElement('button');
+    createBtn.className = 'btn btn-primary';
+    createBtn.textContent = 'Aanmaken';
+    createBtn.onclick = async () => {
+        // Validatie
+        if (!fields.datum.value.trim()) {
+            alert('Datum is verplicht');
+            return;
+        }
+        if (!fields.startTijd.value.trim()) {
+            alert('Starttijd is verplicht');
+            return;
+        }
+        if (!fields.eindTijd.value.trim()) {
+            alert('Eindtijd is verplicht');
+            return;
+        }
+        if (!fields.locatie.value.trim()) {
+            alert('Locatie is verplicht');
+            return;
+        }
+
+        try {
+            console.log('💾 Creating new session...');
+
+            const datum = fields.datum.value;
+            const startTijd = fields.startTijd.value;
+            const eindTijd = fields.eindTijd.value;
+            const locatie = fields.locatie.value;
+
+            // Construeer datetimes als lokale strings (zonder UTC conversie)
+            const startDatetimeStr = `${datum}T${startTijd}:00`;
+            const endDatetimeStr = `${datum}T${eindTijd}:00`;
+
+            // Valideer dat eindtijd na starttijd is (string compare genoeg voor HH:MM format)
+            if (endDatetimeStr <= startDatetimeStr) {
+                alert('Eindtijd moet na starttijd liggen');
+                return;
+            }
+
+            // Extraheer uur en maand
+            const startHour = parseInt(startTijd.split(':')[0]);
+            const startDateObj = new Date(datum);  // Alleen voor maand extractie
+            const startMonth = startDateObj.getMonth() + 1;
+
+            // Genereer sessie naam met starttijd en unieke code voor uniciteit
+            const datumFormatted = new Date(datum).toLocaleDateString('nl-NL');
+            const uniqueCode = Math.floor(1000 + Math.random() * 9000);
+            const sessionName = `Handmatig - ${datumFormatted} ${startTijd} ${locatie} ${uniqueCode}`;
+
+            // Insert naar database
+            const insertData = {
+                session_start_date: datum,
+                session_start_datetime: startDatetimeStr,  // ← Lokale tijd string, geen UTC conversie
+                session_end_datetime: endDatetimeStr,      // ← Lokale tijd string, geen UTC conversie
+                session_start_hour: startHour,
+                session_start_month: startMonth,
+                locatie: locatie,
+                definitief: false,
+                genegeerd: false,
+                sessie_naam: sessionName,
+                team_member: supabaseManager?.teamMember || 'unknown',
+                gpx_filename: null,
+                watertemperatuur_measured: null,
+                helderheid: null,
+                stroomsnelheid: null,
+                watersoort: null,
+                weather_id: null
+            };
+
+            console.log('📋 Insert data:', insertData);
+
+            const { data: newSession, error } = await supabaseManager.client
+                .from(DB_SCHEMA.sessions.table)
+                .insert(insertData)
+                .select();
+
+            if (error) throw error;
+
+            console.log('✅ Session created:', newSession[0]);
+
+            // Sluit modal
+            if (modalOverlay && modalOverlay.parentNode) {
+                modalOverlay.parentNode.removeChild(modalOverlay);
+            }
+
+            // Toon succes bericht
+            if (typeof showStatus === 'function') {
+                showStatus(`✅ Sessie aangemaakt: ${sessionName}`, 'success');
+            }
+
+            // Refresh overview
+            loadUnprocessedSessions();
+
+        } catch (error) {
+            console.error('❌ Error creating session:', error);
+            alert('Fout bij aanmaken sessie: ' + error.message);
+        }
+    };
+    buttonContainer.appendChild(createBtn);
+
+    modalContent.appendChild(buttonContainer);
+    modalOverlay.appendChild(modalContent);
+    document.body.appendChild(modalOverlay);
+
+    // Sluit modal bij klik buiten
+    modalOverlay.onclick = (e) => {
+        if (e.target === modalOverlay) {
+            document.body.removeChild(modalOverlay);
+        }
+    };
+}
+
 // Initialize on DOM ready
 document.addEventListener('DOMContentLoaded', () => {
     console.log('✓ phase4-manager.js loaded');
+
+    // Export function to window
+    window.showNewSessionModal = showNewSessionModal;
 });

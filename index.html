@@ -177,11 +177,7 @@
             cursor: not-allowed;
             transform: none;
         }
-        
-        .debug-button {
-            background: linear-gradient(135deg, #9C27B0 0%, #7B1FA2 100%);
-        }
-        
+
         .cloud-sync-status {
             display: inline-flex;
             align-items: center;
@@ -1162,33 +1158,9 @@
             <button class="btn btn-danger" onclick="logout()" style="margin-right: auto;">
                 🚪 Uitloggen
             </button>
-            
-            <div class="file-input-wrapper">
-                <input type="file" id="gpxInput" accept=".gpx" multiple>
-                <label for="gpxInput" class="file-input-label">📂 GPX Bestanden</label>
-            </div>
-            <div style="display: flex; align-items: center; gap: 10px; margin: 5px 0;">
-                <span style="color: #666; font-size: 0.85em;">💡 Tip: Upload GPX bestanden OF maak handmatig sessies aan</span>
-            </div>
-            <span style="color: #666; font-size: 0.9em; margin: 0 10px;">of</span>
-            <button class="btn btn-primary" onclick="addNewSession()" id="addSessionBtn">➕ Nieuwe Sessie</button>
-            <button class="btn btn-info" onclick="showValidationModal()" id="validateBtn" title="Controleer data volledigheid voor database sync">🔍 Valideer Data</button>
-            
-            <div class="export-group">
-                <button class="btn btn-success" onclick="exportWithChoice()" id="exportBtn" disabled
-                        title="Legacy export function - hidden">
-                    📊 Export Data
-                </button>
-                <button class="btn btn-info" id="cloudSyncAasjesBtn" onclick="syncAasjesOnly()" disabled 
-                        title="Upload alle lokale aasjes naar database">
-                    🎣 Sync Aasjes
-                </button>
-                <button class="btn btn-info" id="cloudSyncBtn" onclick="syncToCloud()" disabled 
-                        title="Sync alle sessies naar nieuwe 3-tabel database structuur">
-                    ☁️ Database Sync
-                </button>
-            </div>
-            
+
+            <button class="btn btn-primary" onclick="showNewSessionModal()" id="addSessionBtn">➕ Nieuwe Sessie</button>
+
             <button class="btn btn-info" onclick="SettingsManager.exportAll()" title="Exporteer alle instellingen voor teamgebruik">💾 Complete Backup</button>
             <div class="file-input-wrapper">
                 <input type="file" id="settingsImportInput" accept=".json" onchange="SettingsManager.importAll(this)" style="display: none;">
@@ -1196,11 +1168,6 @@
             </div>
             
             <button class="btn btn-info" onclick="DataManager.showManager()" title="Beheer locaties en dropdown opties">🔧 Data Beheer</button>
-
-            <button class="btn btn-info" onclick="showPhase4Screen();" title="Verwerk onverwerkte sessies en veld-vangsten">📋 Concept Sessies</button>
-
-            <button class="btn btn-warning" onclick="clearAll()">🔄 Reset Alles</button>
-            <button class="btn debug-button" onclick="debugInfo.show()">🔧 Debug Info</button>
 
             <span id="fileCount" style="margin-left: auto; color: #666; font-weight: 500;"></span>
             
@@ -1494,13 +1461,13 @@
 
     <!-- JavaScript Files - CORRECT LOADING ORDER FOR DATABASE SYNC SYSTEM -->
     <script src="validation-core.js"></script>
+    <script src="db-schema.js"></script>
     <script src="data-managers.js"></script>
-    <script src="debug-info.js"></script>
-    <script src="map-processing.js"></script>
     <script src="ui-sessions.js"></script>
     <script src="lure-interface.js"></script>
     <script src="supabase-integration.js"></script>
     <script src="app-core.js"></script>
+    <script src="phase4-utils.js"></script>
     <script src="phase4-manager.js"></script>
     <script src="phase4-enrichment.js"></script>
     <script src="phase4-mapper.js"></script>

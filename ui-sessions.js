@@ -875,9 +875,9 @@ function updateSessionFieldWithValidationAndCloudSync(sessionIndex, field, value
 
 function addNewSessionWithCloudSync() {
     const cloudInfo = getCloudSyncInfo();
-    
-    // Bepaal basis datum
-    const baseDate = trackPoints.length > 0 ? new Date(trackPoints[0].datetime) : new Date();
+
+    // Bepaal basis datum (vandaag, legacy GPX trackPoints verwijderd)
+    const baseDate = new Date();
     const defaultDateStr = baseDate.toLocaleDateString('nl-NL');
     
     const cloudContext = cloudInfo.available && cloudInfo.teamMember ? 
@@ -997,12 +997,12 @@ function addNewSessionWithCloudSync() {
                 stroomsnelheid: null,
                 helderheid: null,
                 watertemperatuur_measured: null,
-                definitief: false,
-                genegeerd: false
+                weather_id: null,
+                definitief: false
             };
 
             supabaseManager.client
-                .from('sessions')
+                .from(DB_SCHEMA.sessions.table)
                 .insert(sessionData)
                 .select()
                 .then(result => {
@@ -1038,7 +1038,6 @@ function addNewSessionWithCloudSync() {
 
     // Update UI
     updateSessionsList();
-    updateTrackColors();
     updateStats();
     updateDataTable();
 
@@ -1111,12 +1110,11 @@ function editSessionTimeWithCloudSync(sessionIndex) {
     session.endTime = newEndDate;
     
     updateSessionData();
-    
+
     updateSessionsList();
-    updateTrackColors();
     updateStats();
     updateDataTable();
-    
+
     // STEP 3: Safe validation and cloud sync updates
     if (!ValidationStateManager.isValidating) {
         setTimeout(() => {
@@ -1240,18 +1238,17 @@ function splitSessionWithCloudSync(sessionIndex) {
     }
     
     sessions.sort((a, b) => a.startTime - b.startTime);
-    
+
     sessions.forEach((s, idx) => {
         s.id = idx + 1;
         s.name = `Sessie ${idx + 1}`;
         s.color = CONFIG.sessionColors[idx % CONFIG.sessionColors.length];
     });
-    
+
     updateSessionsList();
-    updateTrackColors();
     updateStats();
     updateDataTable();
-    
+
     // STEP 3: Safe validation and cloud sync updates
     if (!ValidationStateManager.isValidating) {
         setTimeout(() => {
@@ -1293,12 +1290,11 @@ function deleteSessionWithCloudSync(sessionIndex) {
             session.name = `Sessie ${idx + 1}`;
             session.color = CONFIG.sessionColors[idx % CONFIG.sessionColors.length];
         });
-        
+
         updateSessionsList();
-        updateTrackColors();
         updateStats();
         updateDataTable();
-        
+
         // STEP 3: Safe validation and cloud sync updates
         if (!ValidationStateManager.isValidating) {
             setTimeout(() => {
@@ -1527,13 +1523,7 @@ function deleteWaypointWithCloudSync(index) {
     
     if (confirm(`Weet je zeker dat je deze vangst wilt verwijderen?${cloudContext}\n\n${parsed.soort || waypoint.name} - ${parsed.lengte || '?'} cm`)) {
         waypoints.splice(index, 1);
-        
-        gpxData.forEach(gpx => {
-            gpx.waypoints = gpx.waypoints.filter(wp => 
-                !(wp.lat === waypoint.lat && wp.lon === waypoint.lon && wp.time === waypoint.time)
-            );
-        });
-        
+
         map.closePopup();
         
         drawWaypoints();

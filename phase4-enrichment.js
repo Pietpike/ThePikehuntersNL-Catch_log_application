@@ -52,12 +52,18 @@ async function initEnrichmentScreen(sessionId) {
         enrichmentSession = sessionData.session;
         enrichmentCatches = sessionData.catches;
 
-        // ⭐ DEBUG: Log alle catches met GPS status
+        // ⭐ DEBUG: Log enrichmentSession volledig
+        console.log('🔐 ENRICHMENT SESSION FULL DATA:', enrichmentSession);
+        console.log('   - bodemhardheid:', enrichmentSession?.bodemhardheid);
+
+        // ⭐ DEBUG: Log alle catches met ID velden (critical voor editCatchModal!)
         console.log('📋 ENRICHMENT SCREEN LOADED CATCHES:', enrichmentCatches.map(c => ({
-            id: c.id,
+            id: c.id,                          // field_catches primary key
+            catch_id: c.catch_id,              // catches primary key
             soort: c.soort,
+            origin: window.currentSession?.origin,
+            bodemhardheid: c.bodemhardheid,
             gps_lat: c.gps_lat,
-            gps_lng: c.gps_lng,
             gps_long: c.gps_long
         })));
 
@@ -92,51 +98,41 @@ async function initEnrichmentScreen(sessionId) {
 async function loadSessionForEnrichment(sessionId) {
     const origin = window.currentSession?.origin;
 
-    if (origin === 'veld') {
-        // Load field_session + field_catches
-        const { data: session, error: sessionError } = await supabaseManager.client
-            .from('field_sessions')
-            .select('*')
-            .eq('id', sessionId)
-            .single();
+    const tables = Phase4Utils.getTableNames(origin);
+    const pks = Phase4Utils.getPrimaryKeys(origin);
 
-        if (sessionError) throw sessionError;
+    // Load session
+    const { data: session, error: sessionError } = await supabaseManager.client
+        .from(tables.sessionTable)
+        .select('*')
+        .eq(pks.sessionPk, sessionId)
+        .single();
 
-        const { data: catches, error: catchError } = await supabaseManager.client
-            .from('field_catches')
-            .select('*')
-            .eq('field_session_id', sessionId)
-            .order('vangst_tijd', { ascending: true });
+    if (sessionError) throw sessionError;
 
-        if (catchError) throw catchError;
+    // ⭐ DEBUG: Log session data
+    console.log('📋 LOADED session:', session);
+    console.log('🏗️ session.bodemhardheid:', session?.bodemhardheid);
 
-        return {
-            session: session,
-            catches: catches || []
-        };
-    } else {
-        // Load manual session + catches
-        const { data: session, error: sessionError } = await supabaseManager.client
-            .from('sessions')
-            .select('*')
-            .eq('session_id', sessionId)
-            .single();
+    // Bepaal welke kolom voor session linking gebruiken (field_session_id vs session_id)
+    const sessionLinkCol = origin === 'veld' ? DB_SCHEMA.field_catches.cols.field_session_id : DB_SCHEMA.catches.cols.session_id;
+    const orderCol = origin === 'veld' ? DB_SCHEMA.field_catches.cols.vangst_tijd : DB_SCHEMA.catches.cols.catch_datetime;
 
-        if (sessionError) throw sessionError;
+    // Load catches
+    const { data: catches, error: catchError } = await supabaseManager.client
+        .from(tables.catchTable)
+        .select('*')
+        .eq(sessionLinkCol, sessionId)
+        .order(orderCol, { ascending: true });
 
-        const { data: catches, error: catchError } = await supabaseManager.client
-            .from('catches')
-            .select('*')
-            .eq('session_id', sessionId)
-            .order('catch_datetime', { ascending: true });
+    if (catchError) throw catchError;
 
-        if (catchError) throw catchError;
+    console.log('🎣 LOADED catches:', catches);
 
-        return {
-            session: session,
-            catches: catches || []
-        };
-    }
+    return {
+        session: session,
+        catches: catches || []
+    };
 }
 
 // ====================================
@@ -150,6 +146,9 @@ function renderSessionForm(session) {
     const container = document.getElementById('phase4EnrichmentContent');
     if (!container) return;
 
+    // Normalize sessie velden
+    const s = Phase4Utils.normalizeSession(enrichmentSession, window.currentSession?.origin);
+
     const form = document.createElement('div');
     form.style.cssText = `
         display: grid;
@@ -162,24 +161,21 @@ function renderSessionForm(session) {
         border: 1px solid #ddd;
     `;
 
-    // Bepaal welke velden aanwezig zijn
-    const isFieldSession = window.currentSession?.origin === 'veld';
-
     // Map veld-sessie → display names
     const fields = [
         {
-            key: isFieldSession ? 'datum' : 'session_start_date',
+            key: window.currentSession?.origin === 'veld' ? 'datum' : 'session_start_date',
             label: 'Datum',
             type: 'date',
             readonly: true
         },
         // TWEE LOCATIE VELDEN: één voor veldregistratie (read-only), één definitief (dropdown)
         {
-            key: isFieldSession ? 'locatie' : null,
+            key: window.currentSession?.origin === 'veld' ? 'locatie' : null,
             label: 'Locatie op water (veldregistratie)',
             type: 'text',
             readonly: true,
-            showOnlyIfFieldSession: true
+            showOnlyIfFieldSession: window.currentSession?.origin === 'veld'
         },
         {
             key: 'locatie_definitief',
@@ -190,50 +186,80 @@ function renderSessionForm(session) {
             required: true
         },
         {
-            key: isFieldSession ? 'start_tijd' : 'session_start_datetime',
+            key: window.currentSession?.origin === 'veld' ? 'start_tijd' : 'session_start_datetime',
             label: 'Starttijd',
             type: 'datetime-local',
             readonly: true
         },
         {
-            key: isFieldSession ? 'eind_tijd' : 'session_end_datetime',
+            key: window.currentSession?.origin === 'veld' ? 'eind_tijd' : 'session_end_datetime',
             label: 'Eindtijd',
             type: 'datetime-local',
             editable: true
         },
         {
-            key: isFieldSession ? 'watersoort' : 'watersoort',
+            key: 'watersoort',
             label: 'Watersoort',
             type: 'select',
             options: ['Rivier', 'Gracht', 'Meer', 'Kanaal', 'Polder', 'Park', 'Vijver'],
             editable: true
         },
         {
-            key: isFieldSession ? 'stroomsnelheid' : 'stroomsnelheid',
+            key: 'stroomsnelheid',
             label: 'Stroomsnelheid',
             type: 'select',
             options: ['Stilstaand tot licht stromend', 'Licht tot matig stromend', 'Snelstromend'],
             editable: true
         },
         {
-            key: isFieldSession ? 'watertemperatuur' : 'watertemperatuur_measured',
+            key: window.currentSession?.origin === 'veld' ? 'watertemperatuur' : 'watertemperatuur_measured',
             label: 'Water temp (°C)',
             type: 'number',
             editable: true
         },
         {
-            key: isFieldSession ? 'helderheid' : 'helderheid',
+            key: 'helderheid',
             label: 'Helderheid',
             type: 'select',
             options: ['Zeer troebel', 'Troebel', 'Matig helder', 'Helder', 'Kristal helder'],
             editable: true
+        },
+        {
+            key: 'aantal_hengels',
+            label: 'Aantal hengels',
+            type: 'number',
+            editable: true
+        },
+        // Sessie-eigenschap: Diepte (read-only, overrideable per vangst)
+        {
+            key: 'diepte',
+            label: 'Sessie Diepte (m)',
+            type: 'number',
+            readonly: true,
+            showOnlyIfFieldSession: window.currentSession?.origin === 'veld'
+        },
+        // Sessie-eigenschap: Bodemhardheid (read-only, overrideable per vangst)
+        {
+            key: 'bodemhardheid',
+            label: 'Sessie Bodemhardheid',
+            type: 'text',
+            readonly: true,
+            showOnlyIfFieldSession: window.currentSession?.origin === 'veld'
+        },
+        // Sessienotitie
+        {
+            key: 'notities',
+            label: 'Sessienotitie',
+            type: 'text',
+            editable: true,
+            showOnlyIfFieldSession: window.currentSession?.origin === 'veld'
         }
     ];
 
     // Render velden
     fields.forEach(field => {
         // Skip veld indien showOnlyIfFieldSession is true en dit is geen veld session
-        if (field.showOnlyIfFieldSession && !isFieldSession) {
+        if (field.showOnlyIfFieldSession && window.currentSession?.origin !== 'veld') {
             return;
         }
 
@@ -295,7 +321,6 @@ function renderSessionForm(session) {
         } else {
             const input = document.createElement('input');
             input.type = field.type;
-            input.value = value || '';
             input.style.cssText = `
                 padding: 8px;
                 border: 1px solid #ddd;
@@ -304,6 +329,13 @@ function renderSessionForm(session) {
                 ${field.readonly ? 'background: #f0f0f0; cursor: not-allowed;' : ''}
             `;
             input.disabled = field.readonly;
+
+            // Fix datetime-local format (remove seconds/milliseconds/timezone)
+            if (field.type === 'datetime-local' && value) {
+                input.value = value.slice(0, 16);
+            } else {
+                input.value = value || '';
+            }
 
             if (field.editable && !field.readonly) {
                 input.onchange = (e) => {
@@ -334,38 +366,44 @@ async function saveSessionData() {
     if (!enrichmentSession) return;
 
     try {
-        const isFieldSession = window.currentSession?.origin === 'veld';
+        const tables = Phase4Utils.getTableNames(window.currentSession?.origin);
+        const pks = Phase4Utils.getPrimaryKeys(window.currentSession?.origin);
+        const isFieldOrigin = window.currentSession?.origin === 'veld';
 
-        if (isFieldSession) {
-            // Voor veld-sessies: locatie is read-only uit field_sessions, dus NIET updaten
-            const { error } = await supabaseManager.client
-                .from('field_sessions')
-                .update({
-                    // Locatie is read-only, niet updaten!
-                    eind_tijd: enrichmentSession.eind_tijd,
-                    watersoort: enrichmentSession.watersoort,
-                    stroomsnelheid: enrichmentSession.stroomsnelheid,
-                    watertemperatuur: enrichmentSession.watertemperatuur,
-                    helderheid: enrichmentSession.helderheid
-                })
-                .eq('id', enrichmentSession.id);
+        // Bepaal update data en session ID op basis van type
+        const updateData = {};
+        let sessionId;
 
-            if (error) throw error;
+        if (isFieldOrigin) {
+            // Voor veld-sessies: update ook de definitieve locatie keuze
+            updateData[DB_SCHEMA.field_sessions.cols.locatie] = enrichmentSession.locatie ?? null;
+            updateData[DB_SCHEMA.field_sessions.cols.eind_tijd] = enrichmentSession.eind_tijd ?? null;
+            updateData[DB_SCHEMA.field_sessions.cols.watersoort] = enrichmentSession.watersoort ?? null;
+            updateData[DB_SCHEMA.field_sessions.cols.stroomsnelheid] = enrichmentSession.stroomsnelheid ?? null;
+            updateData[DB_SCHEMA.field_sessions.cols.watertemperatuur] = enrichmentSession.watertemperatuur ? parseFloat(enrichmentSession.watertemperatuur) : null;
+            updateData[DB_SCHEMA.field_sessions.cols.helderheid] = enrichmentSession.helderheid ?? null;
+            updateData[DB_SCHEMA.field_sessions.cols.aantal_hengels] = enrichmentSession.aantal_hengels ? parseInt(enrichmentSession.aantal_hengels) : null;
+            sessionId = enrichmentSession.id;
         } else {
-            const { error } = await supabaseManager.client
-                .from('sessions')
-                .update({
-                    locatie: enrichmentSession.locatie,
-                    session_end_datetime: enrichmentSession.session_end_datetime,
-                    watersoort: enrichmentSession.watersoort,
-                    stroomsnelheid: enrichmentSession.stroomsnelheid,
-                    watertemperatuur_measured: enrichmentSession.watertemperatuur_measured,
-                    helderheid: enrichmentSession.helderheid
-                })
-                .eq('id', enrichmentSession.id);
-
-            if (error) throw error;
+            // Voor handmatige sessies
+            updateData[DB_SCHEMA.sessions.cols.locatie] = enrichmentSession.locatie ?? null;
+            updateData[DB_SCHEMA.sessions.cols.session_end_datetime] = enrichmentSession.session_end_datetime ?? null;
+            updateData[DB_SCHEMA.sessions.cols.watersoort] = enrichmentSession.watersoort ?? null;
+            updateData[DB_SCHEMA.sessions.cols.stroomsnelheid] = enrichmentSession.stroomsnelheid ?? null;
+            updateData[DB_SCHEMA.sessions.cols.watertemperatuur_measured] = enrichmentSession.watertemperatuur_measured ? parseFloat(enrichmentSession.watertemperatuur_measured) : null;
+            updateData[DB_SCHEMA.sessions.cols.helderheid] = enrichmentSession.helderheid ?? null;
+            updateData[DB_SCHEMA.sessions.cols.aantal_hengels] = enrichmentSession.aantal_hengels ? parseInt(enrichmentSession.aantal_hengels) : null;
+            sessionId = enrichmentSession.session_id;
         }
+
+        console.log('💾 SAVING SESSION DATA:', JSON.stringify(updateData));
+
+        const { error } = await supabaseManager.client
+            .from(tables.sessionTable)
+            .update(updateData)
+            .eq(pks.sessionPk, sessionId);
+
+        if (error) throw error;
 
         console.log('✓ Session data saved');
 
@@ -419,6 +457,10 @@ function renderCatchesTable(catches) {
             <th style="padding: 10px; text-align: left; font-weight: 600;">Lengte (cm)</th>
             <th style="padding: 10px; text-align: left; font-weight: 600;">Aantal</th>
             <th style="padding: 10px; text-align: left; font-weight: 600;">Tijd</th>
+            <th style="padding: 10px; text-align: left; font-weight: 600;">GPS</th>
+            <th style="padding: 10px; text-align: left; font-weight: 600;">Diepte override (m)</th>
+            <th style="padding: 10px; text-align: left; font-weight: 600;">Bodemhardheid override</th>
+            <th style="padding: 10px; text-align: left; font-weight: 600;">Vangsthoogte</th>
             <th style="padding: 10px; text-align: left; font-weight: 600;">Notities</th>
             <th style="padding: 10px; text-align: center; font-weight: 600;">Acties</th>
         </tr>
@@ -437,25 +479,46 @@ function renderCatchesTable(catches) {
         row.onmouseover = () => row.style.background = '#f0f7ff';
         row.onmouseout = () => row.style.background = idx % 2 === 0 ? '#fff' : '#f9f9f9';
 
+        // Normalize vangst data
+        const nc = Phase4Utils.normalizeCatch(catch_, window.currentSession?.origin);
+
         // Bepaal welke kolommen te gebruiken
-        const isFieldCatch = window.currentSession?.origin === 'veld';
         const soort = catch_.soort;
-        const lengte = isFieldCatch ? catch_.lengte : catch_.lengte;
+        const lengte = catch_.lengte;
         const aantal = catch_.aantal;
-        const time = isFieldCatch ? catch_.vangst_tijd : catch_.catch_datetime;
-        const notities = isFieldCatch ? catch_.notities : catch_.waypoint_naam;
+        const time = nc.vangstTijd;
+        const notities = catch_.notities;
+        const vangsthoogte = catch_.vangsthoogte;
+
+        // Override kolommen - alleen tonen als ingevuld
+        const diepteOverride = catch_.diepte;
+        const bodemhardheidOverride = catch_.bodemhardheid;
 
         const timeStr = time ? new Date(time).toLocaleTimeString('nl-NL', {hour: '2-digit', minute: '2-digit'}) : '—';
+
+        // GPS display logic
+        const gpsLat = catch_.gps_lat;
+        const gpsLng = catch_.gps_long;
+        let gpsStr = '⚠️ Geen GPS';
+        if (gpsLat !== null && gpsLat !== undefined && gpsLng !== null && gpsLng !== undefined) {
+            const lat = parseFloat(gpsLat).toFixed(4);
+            const lng = parseFloat(gpsLng).toFixed(4);
+            gpsStr = `📍 ${lat}, ${lng}`;
+        }
 
         row.innerHTML = `
             <td style="padding: 10px;">${soort}</td>
             <td style="padding: 10px;">${lengte || '—'}</td>
             <td style="padding: 10px;">${aantal}</td>
             <td style="padding: 10px;">${timeStr}</td>
+            <td style="padding: 10px; font-size: 0.75em; color: #888;">${gpsStr}</td>
+            <td style="padding: 10px; background: ${diepteOverride ? '#fff8f0' : '#f9f9f9'};">${diepteOverride || '—'}</td>
+            <td style="padding: 10px; background: ${bodemhardheidOverride ? '#fff8f0' : '#f9f9f9'};">${bodemhardheidOverride || '—'}</td>
+            <td style="padding: 10px;">${vangsthoogte || '—'}</td>
             <td style="padding: 10px;">${notities || '—'}</td>
             <td style="padding: 10px; text-align: center;">
-                <button class="btn btn-primary" onclick="editCatchModal('${catch_.id}', '${isFieldCatch}')" style="padding: 4px 8px; font-size: 0.8em; margin-right: 5px;">Bewerk</button>
-                <button class="btn btn-danger" onclick="deleteCatch('${catch_.id}', '${isFieldCatch}')" style="padding: 4px 8px; font-size: 0.8em;">Verwijder</button>
+                <button class="btn btn-primary" onclick="editCatchModal('${nc.id}', '${nc.isField}')" style="padding: 4px 8px; font-size: 0.8em; margin-right: 5px;">Bewerk</button>
+                <button class="btn btn-danger" onclick="deleteCatch('${nc.id}', '${nc.isField}')" style="padding: 4px 8px; font-size: 0.8em;">Verwijder</button>
             </td>
         `;
         tbody.appendChild(row);
@@ -463,13 +526,6 @@ function renderCatchesTable(catches) {
 
     table.appendChild(tbody);
     section.appendChild(table);
-
-    const addBtn = document.createElement('button');
-    addBtn.className = 'btn btn-success';
-    addBtn.textContent = '➕ Vangst Toevoegen';
-    addBtn.style.cssText = 'margin-bottom: 15px;';
-    addBtn.onclick = () => addNewCatchModal();
-    section.appendChild(addBtn);
 
     container.appendChild(section);
 }
@@ -489,12 +545,21 @@ function openLureModalForEnrichment(inputElement, catchId) {
     // Sla de originele selectLure functie op
     window.originalSelectLure = window.selectLure;
 
+    // Markeert dat LureManager aan het werken is
+    window.lureManagerActive = true;
+
     // Override selectLure temporair om in enrichmentData op te slaan
     window.selectLure = function(lureName) {
         console.log(`🎣 Selected lure: ${lureName} for catch ${catchId}`);
 
-        // Update input element
+        // Update input element DIRECT (niet via change event)
         inputElement.value = lureName;
+        inputElement.style.backgroundColor = '#e8f5e9';  // Licht groen voor visuele feedback
+
+        // Reset background color na 1 seconde
+        setTimeout(() => {
+            inputElement.style.backgroundColor = '#f5f5f5';
+        }, 1000);
 
         // Sla op in window.catchEnrichmentData
         if (!window.catchEnrichmentData[catchId]) {
@@ -504,14 +569,35 @@ function openLureModalForEnrichment(inputElement, catchId) {
 
         console.log(`💾 Stored aas in enrichmentData[${catchId}]:`, window.catchEnrichmentData[catchId]);
 
-        // Sluit modal
-        window.originalSelectLure(lureName);
+        // Sluit ALLEEN de LureManager modal ZONDER andere handlers te triggeren
+        // Doe dit DIRECT op de modal DOM element, niet via closeLureModal functie
+        const lureModal = document.getElementById('lureModal');
+        if (lureModal) {
+            lureModal.style.display = 'none';
+        }
+
+        // Herstellen van z-index voor editCatchModal overlay
+        if (window.currentEditCatchModalOverlay) {
+            console.log('🔼 Restoring editCatchModal overlay z-index to 1000');
+            window.currentEditCatchModalOverlay.style.zIndex = '1000';
+        }
 
         // Restore originele selectLure functie
         window.selectLure = window.originalSelectLure;
         delete window.enrichmentCatchIdForLure;
         delete window.originalSelectLure;
+
+        // Delay het 'lureManagerActive' flag resetten zodat event handlers het kunnen checken
+        setTimeout(() => {
+            window.lureManagerActive = false;
+        }, 100);
     };
+
+    // Verlaag z-index van editCatchModal overlay zodat LureManager (z-index 1000) zichtbaar is
+    if (window.currentEditCatchModalOverlay) {
+        console.log('📋 Reducing editCatchModal overlay z-index to 999 to show LureManager');
+        window.currentEditCatchModalOverlay.style.zIndex = '999';
+    }
 
     // Open de bestaande lure modal
     openLureModal(inputElement);
@@ -520,14 +606,6 @@ function openLureModalForEnrichment(inputElement, catchId) {
 // ====================================
 // STAP 6: Add/Edit/Delete Catches
 // ====================================
-
-/**
- * Modal voor nieuwe vangst
- */
-function addNewCatchModal() {
-    console.log('Opening new catch modal...');
-    alert('Klik op de kaart links om een vangst op die locatie toe te voegen');
-}
 
 /**
  * Verwijdert vangst met bevestiging
@@ -541,26 +619,23 @@ async function deleteCatch(catchId, isFieldCatch) {
         // Converteer catchId naar number voor consistentie
         const catchIdAsNumber = parseInt(catchId);
 
-        if (isFieldCatch === 'true') {
-            const { error } = await supabaseManager.client
-                .from('field_catches')
-                .delete()
-                .eq('id', catchIdAsNumber);
+        const tables = Phase4Utils.getTableNames(window.currentSession?.origin);
+        const pks = Phase4Utils.getPrimaryKeys(window.currentSession?.origin);
 
-            if (error) throw error;
-        } else {
-            const { error } = await supabaseManager.client
-                .from('catches')
-                .delete()
-                .eq('id', catchIdAsNumber);
+        const { error } = await supabaseManager.client
+            .from(tables.catchTable)
+            .delete()
+            .eq(pks.catchPk, catchIdAsNumber);
 
-            if (error) throw error;
-        }
+        if (error) throw error;
 
         console.log('✓ Catch deleted');
 
-        // Reload
-        enrichmentCatches = enrichmentCatches.filter(c => c.id !== catchIdAsNumber);
+        // Reload - gebruik het juiste ID-veld voor beide sessietypes
+        const nc = Phase4Utils.normalizeCatch({ id: catchIdAsNumber, catch_id: catchIdAsNumber }, window.currentSession?.origin);
+        enrichmentCatches = enrichmentCatches.filter(c =>
+            nc.isField ? c.id !== catchIdAsNumber : c.catch_id !== catchIdAsNumber
+        );
         const container = document.getElementById('phase4EnrichmentContent');
         container.innerHTML = '';
         renderSessionForm(enrichmentSession);
@@ -577,32 +652,41 @@ async function deleteCatch(catchId, isFieldCatch) {
 
 /**
  * Modal voor bewerken vangst met ALLE velden
- * Groep 1 (field_catches/catches tabellen): soort, lengte, aantal, vangst_tijd/catch_datetime, notities/waypoint_naam
- * Groep 2 (window.catchEnrichmentData): aas, techniek, diepte, bodemhardheid, helderheid override, stroomsnelheid override, watertemperatuur override
+ * Groep 1 (field_catches/catches tabellen): soort, lengte, aantal, vangst_tijd/catch_datetime, notities/notities, diepte, vangsthoogte, bodemhardheid
+ * Groep 2 (window.catchEnrichmentData): aas, techniek, vissnelheid, booster, gewicht, structuur, aasvis, zon_schaduw, helderheid override, stroomsnelheid override, watertemperatuur override
  */
 async function editCatchModal(catchId, isFieldCatch) {
     console.log('✏️ EDIT BUTTON CLICKED!', { catchId, isFieldCatch });
 
-    // Converteer catchId naar number omdat c.id in database een number is
+    // Converteer catchId naar number omdat IDs in database numbers zijn
     const catchIdAsNumber = parseInt(catchId);
 
-    // Vind de vangst in enrichmentCatches array op id veld
-    const catchToEdit = enrichmentCatches.find(c => c.id === catchIdAsNumber);
+    // Normalize catch voor correcte ID lookup
+    const nc = Phase4Utils.normalizeCatch({id: catchIdAsNumber, catch_id: catchIdAsNumber}, window.currentSession?.origin);
+
+    // Vind de vangst in enrichmentCatches array
+    // ⭐ KRITIEK: field_catches hebben 'id' veld, catches hebben 'catch_id' veld
+    const catchToEdit = enrichmentCatches.find(c =>
+        nc.isField ? c.id === catchIdAsNumber : c.catch_id === catchIdAsNumber
+    );
 
     if (!catchToEdit) {
-        console.error('❌ Vangst niet gevonden! catchId:', catchId);
+        console.error('❌ Vangst niet gevonden!', {
+            catchId,
+            isFieldOrigin: nc.isField,
+            searchedFor: nc.isField ? 'c.id' : 'c.catch_id',
+            arrayContents: enrichmentCatches.map(c => ({ id: c.id, catch_id: c.catch_id }))
+        });
         alert('Vangst niet gevonden');
         return;
     }
-
-    // Bepaal tabel en origin
-    const isFieldOrigin = isFieldCatch === 'true' || isFieldCatch === true;
 
     // Haal bestaande verrijkingsdata op voor deze vangst (als aanwezig)
     const existingEnrichment = window.catchEnrichmentData[catchIdAsNumber] || {};
 
     // Maak modal overlay
     const modalOverlay = document.createElement('div');
+    modalOverlay.id = `editCatchModal-overlay-${catchIdAsNumber}`;
     modalOverlay.style.cssText = `
         position: fixed;
         top: 0;
@@ -615,6 +699,9 @@ async function editCatchModal(catchId, isFieldCatch) {
         justify-content: center;
         z-index: 1000;
     `;
+
+    // Sla referentie op zodat we dit kunnen manipuleren in openLureModalForEnrichment
+    window.currentEditCatchModalOverlay = modalOverlay;
 
     const modalContent = document.createElement('div');
     modalContent.style.cssText = `
@@ -674,7 +761,12 @@ async function editCatchModal(catchId, isFieldCatch) {
             input = document.createElement('input');
             input.type = type;
             input.style.cssText = 'padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9em;';
-            input.value = value || '';
+            // Fix datetime-local format (remove seconds/milliseconds/timezone)
+            if (input.type === 'datetime-local' && value) {
+                input.value = value.slice(0, 16);
+            } else {
+                input.value = value || '';
+            }
         }
 
         input.id = `edit_${key}`;
@@ -707,13 +799,28 @@ async function editCatchModal(catchId, isFieldCatch) {
     fields.aantal = addField('Aantal', 'aantal', 'number', null, catchToEdit.aantal);
 
     // Tijd en notities velden - afhankelijk van type
-    if (isFieldOrigin) {
+    if (nc.isField) {
         fields.vangst_tijd = addField('Vangst Tijd', 'vangst_tijd', 'datetime-local', null, catchToEdit.vangst_tijd);
         fields.notities = addField('Notities', 'notities', 'text', null, catchToEdit.notities);
     } else {
         fields.catch_datetime = addField('Vangst Tijd', 'catch_datetime', 'datetime-local', null, catchToEdit.catch_datetime);
-        fields.waypoint_naam = addField('Notities', 'waypoint_naam', 'text', null, catchToEdit.waypoint_naam);
+        fields.notities = addField('Notities', 'notities', 'text', null, catchToEdit.notities);
     }
+
+    // Diepte en bodemhardheid fallback via Phase4Utils
+    const fallbacks = Phase4Utils.getCatchFallbacks(catchToEdit, enrichmentSession, window.currentSession?.origin);
+
+    // Diepte override - alleen invullen als afwijkend van sessiewaarde
+    fields.diepte_catch = addField('Diepte override (m)', 'diepte_catch', 'number', null, fallbacks.diepte);
+    fields.vangsthoogte = addField('Vangsthoogte', 'vangsthoogte', 'select',
+        ['Bodem', 'Bijna bodem', 'Midden', 'Oppervlak'],
+        catchToEdit.vangsthoogte
+    );
+    // Bodemhardheid override - alleen invullen als afwijkend van sessiewaarde
+    fields.bodemhardheid = addField('Bodemhardheid override', 'bodemhardheid', 'select',
+        ['Hard', 'Medium', 'Zacht', 'Onbekend'],
+        fallbacks.bodemhardheid
+    );
 
     // ============================================================
     // GROEP 2: Verrijkingsvelden (opslaan in window.catchEnrichmentData)
@@ -748,6 +855,7 @@ async function editCatchModal(catchId, isFieldCatch) {
     aasBtn.onclick = (e) => {
         e.preventDefault();
         e.stopPropagation();
+        e.stopImmediatePropagation();
         openLureModalForEnrichment(aasInput, catchIdAsNumber);
         return false;
     };
@@ -761,10 +869,28 @@ async function editCatchModal(catchId, isFieldCatch) {
         ['Dropshot', 'Jiggen', 'C-rig', 'T-rig', 'Trollen', 'Spinning', 'Verticalen', 'Jerk', 'Twitch', 'N-rig', 'Cheb-rig'],
         existingEnrichment.techniek
     );
-    fields.diepte = addField('Diepte (m)', 'diepte', 'number', null, existingEnrichment.diepte);
-    fields.bodemhardheid = addField('Bodemhardheid', 'bodemhardheid', 'select',
-        ['Hard', 'Medium', 'Zacht', 'Onbekend'],
-        existingEnrichment.bodemhardheid
+
+    // Nieuwe verrijkingsvelden
+    fields.vissnelheid = addField('Vissnelheid', 'vissnelheid', 'select',
+        ['Extreem traag', 'Traag', 'Gemiddeld', 'Snel', 'Extreem snel'],
+        existingEnrichment.vissnelheid
+    );
+    fields.booster = addField('Booster', 'booster', 'select',
+        ['Ja', 'Nee'],
+        existingEnrichment.booster
+    );
+    fields.gewicht = addField('Gewicht (gr)', 'gewicht', 'number', null, existingEnrichment.gewicht);
+    fields.structuur = addField('Structuur', 'structuur', 'select',
+        ['Brug', 'Kademuur', 'Waterplanten', 'Talud', 'Havenmonding', 'Paal/obstakel', 'Steiger'],
+        existingEnrichment.structuur
+    );
+    fields.aasvis = addField('Aasvis', 'aasvis', 'select',
+        ['Veel', 'Beetje', 'Geen'],
+        existingEnrichment.aasvis
+    );
+    fields.zon_schaduw = addField('Zon/Schaduw', 'zon_schaduw', 'select',
+        ['Zon', 'Schaduw'],
+        existingEnrichment.zon_schaduw
     );
 
     // Override velden voor sessions conditions
@@ -790,15 +916,85 @@ async function editCatchModal(catchId, isFieldCatch) {
 
     modalContent.appendChild(form);
 
+    // ============================================================
+    // LINKED CATCHES SECTION
+    // ============================================================
+    const linkedSection = document.createElement('div');
+    linkedSection.style.cssText = 'margin-top: 20px; padding-top: 15px; border-top: 2px solid #ddd;';
+
+    // Toon huidige koppeling als aanwezig
+    if (catchToEdit.linked_sighting_id || catchToEdit.linked_catch_id) {
+        const linkedInfo = document.createElement('div');
+        linkedInfo.style.cssText = 'display: flex; align-items: center; gap: 10px; margin-bottom: 15px; padding: 10px; background: #e8f5e9; border-radius: 4px;';
+
+        const linkedText = document.createElement('span');
+        if (catchToEdit.linked_sighting_id) {
+            linkedText.textContent = `🔗 Gekoppeld aan waarneming #${catchToEdit.linked_sighting_id}`;
+        } else if (catchToEdit.linked_catch_id) {
+            linkedText.textContent = `🔗 Gekoppeld aan vangst #${catchToEdit.linked_catch_id}`;
+        }
+        linkedText.style.cssText = 'flex: 1; color: #2e7d32;';
+        linkedInfo.appendChild(linkedText);
+
+        const unlinkBtn = document.createElement('button');
+        unlinkBtn.type = 'button';
+        unlinkBtn.textContent = '❌ Verwijder';
+        unlinkBtn.style.cssText = 'padding: 6px 12px; background: #d32f2f; color: white; border: none; border-radius: 4px; font-size: 0.85em; cursor: pointer;';
+        unlinkBtn.onclick = async (e) => {
+            e.preventDefault();
+            try {
+                const tables = Phase4Utils.getTableNames(window.currentSession?.origin);
+                const pks = Phase4Utils.getPrimaryKeys(window.currentSession?.origin);
+
+                const { error } = await supabaseManager.client
+                    .from(tables.catchTable)
+                    .update({
+                        linked_sighting_id: null,
+                        linked_catch_id: null
+                    })
+                    .eq(pks.catchPk, catchIdAsNumber);
+
+                if (error) throw error;
+
+                console.log('✓ Koppeling verwijderd');
+                catchToEdit.linked_sighting_id = null;
+                catchToEdit.linked_catch_id = null;
+                linkedInfo.remove();
+                showMessage('Koppeling verwijderd', 'success');
+            } catch (error) {
+                console.error('❌ Error removing link:', error);
+                alert('Fout bij verwijderen koppeling: ' + error.message);
+            }
+        };
+        linkedInfo.appendChild(unlinkBtn);
+        linkedSection.appendChild(linkedInfo);
+    }
+
+    // Knop om linked catches modal te openen
+    const linkBtn = document.createElement('button');
+    linkBtn.type = 'button';
+    linkBtn.textContent = '🗺️ Koppel aan eerdere vis';
+    linkBtn.style.cssText = 'width: 100%; padding: 10px; background: #FF9800; color: white; border: none; border-radius: 4px; font-size: 0.95em; cursor: pointer; font-weight: 500;';
+    linkBtn.onclick = (e) => {
+        e.preventDefault();
+        openLinkedCatchMap(catchToEdit, enrichmentSession);
+    };
+    linkedSection.appendChild(linkBtn);
+    modalContent.appendChild(linkedSection);
+
     // Buttons
     const buttonContainer = document.createElement('div');
-    buttonContainer.style.cssText = 'display: flex; gap: 10px; justify-content: flex-end;';
+    buttonContainer.style.cssText = 'display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;';
 
     const cancelBtn = document.createElement('button');
     cancelBtn.className = 'btn btn-secondary';
     cancelBtn.textContent = 'Annuleren';
     cancelBtn.style.cssText = 'padding: 10px 20px;';
-    cancelBtn.onclick = () => document.body.removeChild(modalOverlay);
+    cancelBtn.onclick = () => {
+        if (modalOverlay && modalOverlay.parentNode) {
+            modalOverlay.parentNode.removeChild(modalOverlay);
+        }
+    };
     buttonContainer.appendChild(cancelBtn);
 
     const saveBtn = document.createElement('button');
@@ -822,45 +1018,43 @@ async function editCatchModal(catchId, isFieldCatch) {
             // ============================================================
             // GROEP 1: Basis velden → database
             // ============================================================
+            const tables = Phase4Utils.getTableNames(window.currentSession?.origin);
+            const pks = Phase4Utils.getPrimaryKeys(window.currentSession?.origin);
+
             const updateData = {
                 soort: fields.soort.value,
                 lengte: parseInt(fields.lengte.value),
                 aantal: parseInt(fields.aantal.value) || 1,
+                diepte: fields.diepte_catch.value ? parseFloat(fields.diepte_catch.value) : null,
+                vangsthoogte: fields.vangsthoogte.value || null,
             };
 
-            if (isFieldOrigin) {
+            // Voeg schema-specifieke kolommen toe
+            updateData[DB_SCHEMA[nc.isField ? 'field_catches' : 'catches'].cols.bodemhardheid] = fields.bodemhardheid.value || null;
+
+            // Handle time field (vangst_tijd vs catch_datetime)
+            if (nc.isField) {
                 if (fields.vangst_tijd.value) {
-                    updateData.vangst_tijd = new Date(fields.vangst_tijd.value).toISOString();
+                    updateData.vangst_tijd = Phase4Utils.toLocalISOString(new Date(fields.vangst_tijd.value));
                 }
-                if (fields.notities.value) {
-                    updateData.notities = fields.notities.value;
-                }
-
-                console.log('💾 Groep 1: Updating field_catches with:', updateData);
-
-                const { error } = await supabaseManager.client
-                    .from('field_catches')
-                    .update(updateData)
-                    .eq('id', catchIdAsNumber);
-
-                if (error) throw error;
             } else {
                 if (fields.catch_datetime.value) {
-                    updateData.catch_datetime = new Date(fields.catch_datetime.value).toISOString();
+                    updateData[DB_SCHEMA.catches.cols.catch_datetime] = Phase4Utils.toLocalISOString(new Date(fields.catch_datetime.value));
                 }
-                if (fields.waypoint_naam.value) {
-                    updateData.waypoint_naam = fields.waypoint_naam.value;
-                }
-
-                console.log('💾 Groep 1: Updating catches with:', updateData);
-
-                const { error } = await supabaseManager.client
-                    .from('catches')
-                    .update(updateData)
-                    .eq('id', catchIdAsNumber);
-
-                if (error) throw error;
             }
+
+            if (fields.notities.value) {
+                updateData[DB_SCHEMA[nc.isField ? 'field_catches' : 'catches'].cols.notities] = fields.notities.value;
+            }
+
+            console.log('💾 Groep 1: Updating', nc.isField ? 'field_catches' : 'catches', 'with:', updateData);
+
+            const { error } = await supabaseManager.client
+                .from(tables.catchTable)
+                .update(updateData)
+                .eq(pks.catchPk, catchIdAsNumber);
+
+            if (error) throw error;
 
             // ============================================================
             // GROEP 2: Verrijkingsvelden → window.catchEnrichmentData
@@ -873,11 +1067,13 @@ async function editCatchModal(catchId, isFieldCatch) {
             // Techniek
             if (fields.techniek.value) enrichmentData.techniek = fields.techniek.value;
 
-            // Diepte
-            if (fields.diepte.value) enrichmentData.diepte = parseInt(fields.diepte.value);
-
-            // Bodem hardheid
-            if (fields.bodemhardheid.value) enrichmentData.bodem_hardheid = fields.bodemhardheid.value;
+            // Nieuwe verrijkingsvelden
+            if (fields.vissnelheid.value) enrichmentData.vissnelheid = fields.vissnelheid.value;
+            if (fields.booster.value) enrichmentData.booster = fields.booster.value;
+            if (fields.gewicht.value) enrichmentData.gewicht = parseInt(fields.gewicht.value);
+            if (fields.structuur.value) enrichmentData.structuur = fields.structuur.value;
+            if (fields.aasvis.value) enrichmentData.aasvis = fields.aasvis.value;
+            if (fields.zon_schaduw.value) enrichmentData.zon_schaduw = fields.zon_schaduw.value;
 
             // Override velden
             if (fields.helderheid_override.value) enrichmentData.helderheid_override = fields.helderheid_override.value;
@@ -894,10 +1090,13 @@ async function editCatchModal(catchId, isFieldCatch) {
             console.log('✅ Catch updated successfully (Groep 1 → database, Groep 2 → window.catchEnrichmentData)');
 
             // Refresh enrichment screen
-            await initEnrichmentScreen(enrichmentSession.id);
+            const s = Phase4Utils.normalizeSession(enrichmentSession, window.currentSession?.origin);
+            await initEnrichmentScreen(s.id);
 
             // Verwijder modal
-            document.body.removeChild(modalOverlay);
+            if (modalOverlay && modalOverlay.parentNode) {
+                modalOverlay.parentNode.removeChild(modalOverlay);
+            }
 
         } catch (error) {
             console.error('❌ Error updating catch:', error);
@@ -911,11 +1110,293 @@ async function editCatchModal(catchId, isFieldCatch) {
     document.body.appendChild(modalOverlay);
 
     // Sluit modal bij klik buiten
+    // KRITIEK: Check dat LureManager niet actief is voordat je editCatchModal sluit
     modalOverlay.onclick = (e) => {
         if (e.target === modalOverlay) {
+            // Controleer dat LureManager niet bezig is
+            if (window.lureManagerActive) {
+                console.log('🔒 LureManager active, ignoring background click on editCatchModal');
+                e.stopPropagation();
+                e.preventDefault();
+                return false;
+            }
+
+            // Controleer ook dat de LureManager modal gesloten is
+            const lureModal = document.getElementById('lureModal');
+            if (lureModal && lureModal.style.display !== 'none') {
+                console.log('🔒 LureManager modal still visible, ignoring background click');
+                e.stopPropagation();
+                e.preventDefault();
+                return false;
+            }
+
+            // Veilig om modal te sluiten
             document.body.removeChild(modalOverlay);
         }
     };
+}
+
+// ====================================
+// LINKED CATCHES MAP
+// ====================================
+
+/**
+ * Opent kaartmodal om eerdere vangsten/waarnemingen te koppelen aan huidge vangst
+ * @param {Object} catch_ - Huidge vangst object
+ * @param {Object} session - Sessie object voor context
+ */
+async function openLinkedCatchMap(catch_, session) {
+    console.log('🗺️ Opening linked catches map for catch:', catch_);
+
+    try {
+        // Helper functie: bereken afstand tussen twee GPS punten
+        const calculateDistance = (lat1, lng1, lat2, lng2) => {
+            const R = 6371e3; // meters
+            const φ1 = lat1 * Math.PI/180;
+            const φ2 = lat2 * Math.PI/180;
+            const Δφ = (lat2-lat1) * Math.PI/180;
+            const Δλ = (lng2-lng1) * Math.PI/180;
+            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                      Math.cos(φ1) * Math.cos(φ2) *
+                      Math.sin(Δλ/2) * Math.sin(Δλ/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c; // in meters
+        };
+
+        // Haal vangst GPS op
+        const catchLat = catch_.gps_lat;
+        const catchLng = catch_.gps_long;
+        const catchTime = catch_.vangst_tijd || catch_.catch_datetime;
+
+        if (!catchLat || !catchLng) {
+            alert('Vangst heeft geen GPS coördinaten');
+            return;
+        }
+
+        // Haal sightings op (waarnemingen)
+        const { data: sightings, error: sightingsError } = await supabaseManager.client
+            .from('sightings')
+            .select('*')
+            .eq('soort', catch_.soort)
+            .lt('sighting_datetime', catchTime)
+            .order('sighting_datetime', { ascending: false });
+
+        if (sightingsError) throw sightingsError;
+
+        // Filter sightings op afstand < 500m
+        const nearbySightings = (sightings || []).filter(s => {
+            const dist = calculateDistance(catchLat, catchLng, s.gps_lat, s.gps_long);
+            return dist < 500;
+        });
+
+        // Haal catches op (eerdere vangsten)
+        const { data: catches, error: catchesError } = await supabaseManager.client
+            .from('catches')
+            .select('*')
+            .eq('soort', catch_.soort)
+            .lt('catch_datetime', catchTime)
+            .order('catch_datetime', { ascending: false });
+
+        if (catchesError) throw catchesError;
+
+        // Filter catches op afstand < 500m EN exclude huidge vangst
+        const currentCatchId = catch_.id || catch_.catch_id;
+        const nearbyCatches = (catches || []).filter(c => {
+            const dist = calculateDistance(catchLat, catchLng, c.gps_lat, c.gps_long);
+            return dist < 500 && c.catch_id !== currentCatchId;
+        });
+
+        console.log(`🗺️ Found ${nearbySightings.length} sightings and ${nearbyCatches.length} catches nearby`);
+
+        // Maak modal overlay
+        const mapModal = document.createElement('div');
+        mapModal.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+        `;
+
+        const mapContainer = document.createElement('div');
+        mapContainer.style.cssText = `
+            background: white;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 900px;
+            height: 80vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        `;
+
+        // Header
+        const header = document.createElement('div');
+        header.style.cssText = 'padding: 15px 20px; border-bottom: 1px solid #ddd; flex-shrink: 0;';
+        header.innerHTML = `
+            <h3 style="margin: 0 0 5px 0; color: #1a1a1a;">🔗 Eerdere vangsten/waarnemingen</h3>
+            <p style="margin: 0; color: #666; font-size: 0.85em;">Klik op een marker om deze aan de huidge vangst te koppelen</p>
+        `;
+        mapContainer.appendChild(header);
+
+        // Kaart div
+        const mapDiv = document.createElement('div');
+        mapDiv.id = 'linkedCatchesMap';
+        mapDiv.style.cssText = 'flex: 1; position: relative;';
+        mapContainer.appendChild(mapDiv);
+
+        // Footer met buttons
+        const footer = document.createElement('div');
+        footer.style.cssText = 'padding: 15px 20px; border-top: 1px solid #ddd; flex-shrink: 0; text-align: right;';
+
+        const closeBtn = document.createElement('button');
+        closeBtn.textContent = 'Sluit';
+        closeBtn.style.cssText = 'padding: 8px 16px; background: #666; color: white; border: none; border-radius: 4px; cursor: pointer;';
+        closeBtn.onclick = () => {
+            mapModal.remove();
+        };
+        footer.appendChild(closeBtn);
+        mapContainer.appendChild(footer);
+
+        mapModal.appendChild(mapContainer);
+        document.body.appendChild(mapModal);
+
+        // Initialiseer Leaflet kaart
+        setTimeout(() => {
+            const map = L.map('linkedCatchesMap').setView([catchLat, catchLng], 15);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors',
+                maxZoom: 19
+            }).addTo(map);
+
+            // Huidge vangst als groen marker
+            L.marker([catchLat, catchLng], {
+                icon: L.icon({
+                    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+                    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+                    iconSize: [25, 41],
+                    iconAnchor: [12, 41],
+                    popupAnchor: [1, -34],
+                    shadowSize: [41, 41]
+                })
+            }).bindPopup('📍 Huidge vangst (huisnummer)').addTo(map);
+
+            // Waarnemingen als oranje markers
+            nearbySightings.forEach(sighting => {
+                L.marker([sighting.gps_lat, sighting.gps_long], {
+                    icon: L.icon({
+                        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-orange.png',
+                        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+                        iconSize: [25, 41],
+                        iconAnchor: [12, 41],
+                        popupAnchor: [1, -34],
+                        shadowSize: [41, 41]
+                    })
+                }).bindPopup(`
+                    <div style="font-size: 0.9em;">
+                        <strong>🔍 Waarneming #${sighting.sighting_id}</strong><br>
+                        Datum: ${sighting.sighting_datetime?.substring(0, 10)}<br>
+                        ${sighting.zekerheid ? `Zekerheid: ${sighting.zekerheid}<br>` : ''}
+                        <button onclick="linkCatchToSighting(${sighting.sighting_id})"
+                                style="margin-top: 8px; padding: 6px 12px; background: #FF9800; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%; font-size: 0.85em;">
+                            🔗 Koppel aan deze
+                        </button>
+                    </div>
+                `).addTo(map);
+            });
+
+            // Eerdere vangsten als blauwe markers
+            nearbyCatches.forEach(previousCatch => {
+                L.marker([previousCatch.gps_lat, previousCatch.gps_long], {
+                    icon: L.icon({
+                        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+                        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+                        iconSize: [25, 41],
+                        iconAnchor: [12, 41],
+                        popupAnchor: [1, -34],
+                        shadowSize: [41, 41]
+                    })
+                }).bindPopup(`
+                    <div style="font-size: 0.9em;">
+                        <strong>🎣 Vangst #${previousCatch.catch_id}</strong><br>
+                        Datum: ${previousCatch.catch_datetime?.substring(0, 10)}<br>
+                        ${previousCatch.lengte ? `Lengte: ${previousCatch.lengte}cm<br>` : ''}
+                        <button onclick="linkCatchToCatch(${previousCatch.catch_id})"
+                                style="margin-top: 8px; padding: 6px 12px; background: #1976D2; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%; font-size: 0.85em;">
+                            🔗 Koppel aan deze
+                        </button>
+                    </div>
+                `).addTo(map);
+            });
+
+        }, 100);
+
+        // Stel global functies in voor popup buttons
+        window.linkCatchToSighting = async (sightingId) => {
+            try {
+                const tables = Phase4Utils.getTableNames(window.currentSession?.origin);
+                const pks = Phase4Utils.getPrimaryKeys(window.currentSession?.origin);
+
+                const { error } = await supabaseManager.client
+                    .from(tables.catchTable)
+                    .update({
+                        linked_sighting_id: sightingId,
+                        linked_catch_id: null
+                    })
+                    .eq(pks.catchPk, catch_.id || catch_.catch_id);
+
+                if (error) throw error;
+
+                console.log(`✓ Catch linked to sighting #${sightingId}`);
+                alert(`Gekoppeld aan waarneming #${sightingId}`);
+                mapModal.remove();
+
+                // Refresh enrichment screen
+                const s = Phase4Utils.normalizeSession(session, window.currentSession?.origin);
+                await initEnrichmentScreen(s.id);
+            } catch (error) {
+                console.error('❌ Error linking catch to sighting:', error);
+                alert('Fout bij koppelen: ' + error.message);
+            }
+        };
+
+        window.linkCatchToCatch = async (previousCatchId) => {
+            try {
+                const tables = Phase4Utils.getTableNames(window.currentSession?.origin);
+                const pks = Phase4Utils.getPrimaryKeys(window.currentSession?.origin);
+
+                const { error } = await supabaseManager.client
+                    .from(tables.catchTable)
+                    .update({
+                        linked_sighting_id: null,
+                        linked_catch_id: previousCatchId
+                    })
+                    .eq(pks.catchPk, catch_.id || catch_.catch_id);
+
+                if (error) throw error;
+
+                console.log(`✓ Catch linked to catch #${previousCatchId}`);
+                alert(`Gekoppeld aan vangst #${previousCatchId}`);
+                mapModal.remove();
+
+                // Refresh enrichment screen
+                const s = Phase4Utils.normalizeSession(session, window.currentSession?.origin);
+                await initEnrichmentScreen(s.id);
+            } catch (error) {
+                console.error('❌ Error linking catch to catch:', error);
+                alert('Fout bij koppelen: ' + error.message);
+            }
+        };
+
+    } catch (error) {
+        console.error('❌ Error in openLinkedCatchMap:', error);
+        alert('Fout bij openen kaart: ' + error.message);
+    }
 }
 
 // Initialize on DOM ready
